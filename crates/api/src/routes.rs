@@ -1,5 +1,8 @@
 //! The router: health probes, implemented operations, and a `501` for every
 //! other operation in the contract.
+//!
+//! To implement an operation: add its `operationId` to
+//! [`IMPLEMENTED`](crate::implemented::IMPLEMENTED) and an arm to [`implemented`].
 
 use std::collections::BTreeMap;
 
@@ -11,6 +14,7 @@ use axum::{Json, Router};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
+use crate::auth;
 use crate::config::Config;
 use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
@@ -22,7 +26,7 @@ use crate::state::AppState;
 /// `/healthz` and `/readyz` sit at the root whatever `base_path` is, so probes
 /// do not depend on how the proxy maps the API.
 pub fn router(state: AppState, config: &Config) -> Router {
-    let api = implemented_routes().merge(pending_routes()).fallback(not_found);
+    let api = contract_routes().fallback(not_found);
     let probes = Router::new().route("/healthz", get(healthz)).route("/readyz", get(readyz));
     let app = if config.base_path == "/" {
         probes.merge(api)
@@ -32,25 +36,47 @@ pub fn router(state: AppState, config: &Config) -> Router {
     app.with_state(state).layer(TraceLayer::new_for_http())
 }
 
-/// Operations with a real handler. Empty until the first one lands.
-fn implemented_routes() -> Router<AppState> {
-    Router::new()
-}
-
-/// Every contract operation not listed in [`IMPLEMENTED`], answering `501`.
-fn pending_routes() -> Router<AppState> {
+/// Every contract operation, on the contract's own method and path: its
+/// handler if it has one, `501` otherwise.
+///
+/// # Panics
+///
+/// When [`IMPLEMENTED`] and [`implemented`] disagree about an operation. Every
+/// test builds the router, so the mismatch cannot reach a release.
+fn contract_routes() -> Router<AppState> {
     let mut by_path: BTreeMap<&'static str, MethodRouter<AppState>> = BTreeMap::new();
     for op in ax_contract::operations() {
-        if IMPLEMENTED.contains(&op.id.as_str()) {
-            continue;
-        }
         let Some(filter) = method_filter(&op.method) else { continue };
         let id: &'static str = op.id.as_str();
-        let handler = move |lang: Lang| async move { ApiError::not_implemented(lang, id) };
         let methods = by_path.remove(op.path.as_str()).unwrap_or_default();
-        by_path.insert(op.path.as_str(), methods.on(filter, handler));
+        let listed = IMPLEMENTED.contains(&id);
+        let methods = match implemented(id) {
+            Some(add_handler) => {
+                assert!(listed, "{id} has a handler in routes::implemented but is not listed in IMPLEMENTED");
+                add_handler(methods, filter)
+            }
+            None => {
+                assert!(!listed, "{id} is listed in IMPLEMENTED but has no handler in routes::implemented");
+                methods.on(filter, move |lang: Lang| async move { ApiError::not_implemented(lang, id) })
+            }
+        };
+        by_path.insert(op.path.as_str(), methods);
     }
     by_path.into_iter().fold(Router::new(), |router, (path, methods)| router.route(path, methods))
+}
+
+type AddHandler = fn(MethodRouter<AppState>, MethodFilter) -> MethodRouter<AppState>;
+
+/// How to add the handler of operation `id` to its path, or `None` when it has
+/// none yet. One arm per entry of [`IMPLEMENTED`]; the method and path come
+/// from the contract.
+fn implemented(id: &str) -> Option<AddHandler> {
+    Some(match id {
+        "login" => |methods, filter| methods.on(filter, auth::handlers::login),
+        "logout" => |methods, filter| methods.on(filter, auth::handlers::logout),
+        "me" => |methods, filter| methods.on(filter, auth::handlers::me),
+        _ => return None,
+    })
 }
 
 fn method_filter(method: &str) -> Option<MethodFilter> {

@@ -101,6 +101,64 @@ impl ApiError {
         Self::new(ErrorCode::NotFound, lang.pick("요청한 주소를 찾을 수 없습니다.", "Not found."))
     }
 
+    /// `400`: the body does not match the operation's schema (the mock's `checkInput`).
+    pub fn check_input(lang: Lang, issues: Vec<Issue>) -> Self {
+        Self::new(ErrorCode::BadRequest, lang.pick("입력값을 확인해 주세요.", "Please check the input."))
+            .with_issues(issues)
+    }
+
+    /// `401`: no session, or one that has ended (the mock's `signInAgain`).
+    pub fn sign_in_again(lang: Lang) -> Self {
+        Self::new(ErrorCode::Unauthorized, lang.pick("다시 로그인해 주세요.", "Please sign in again."))
+    }
+
+    /// `401` from `login`, whatever the reason: no such account, a deactivated
+    /// one, or a wrong password (the mock's `wrongCredentials`).
+    pub fn wrong_credentials(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Unauthorized,
+            lang.pick("이메일 또는 비밀번호가 맞지 않습니다.", "The email or password is incorrect."),
+        )
+    }
+
+    /// `403`: the role lacks the permission (the mock's `forbidden`).
+    pub fn forbidden(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Forbidden,
+            lang.pick("이 작업을 할 권한이 없습니다.", "You do not have permission to do this."),
+        )
+    }
+
+    /// `403`: an admin tried to create or change an operator account (the mock's `operatorProvisioned`).
+    pub fn operator_provisioned(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Forbidden,
+            lang.pick(
+                "운영자 계정은 서비스가 관리합니다. 여기서 만들거나 바꿀 수 없습니다.",
+                "Operator accounts are managed by the service and cannot be created or changed here.",
+            ),
+        )
+    }
+
+    /// `500` (the mock's `unknown`). The cause goes to the log, not to the client.
+    pub fn internal(lang: Lang) -> Self {
+        Self::new(ErrorCode::Internal, lang.pick("알 수 없는 오류가 발생했습니다.", "An unexpected error occurred."))
+    }
+
+    /// `500` for a database failure, logged here.
+    pub fn database(lang: Lang, error: &sqlx::Error) -> Self {
+        tracing::error!(%error, "database error");
+        Self::internal(lang)
+    }
+
+    /// `500` for an operation that needs the database when `DATABASE_URL` is unset.
+    pub fn no_database(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Internal,
+            lang.pick("서버에 데이터베이스가 설정되지 않았습니다.", "The server has no database configured."),
+        )
+    }
+
     /// A contract operation this server does not implement yet: `501` with
     /// the contract's `internal` code, naming the operation.
     pub fn not_implemented(lang: Lang, operation_id: &str) -> Self {
@@ -142,5 +200,22 @@ mod tests {
     fn issues_are_left_out_when_empty() {
         let body = serde_json::to_value(ApiError::not_found(Lang::En).body).unwrap();
         assert_eq!(body, serde_json::json!({ "code": "not_found", "message": "Not found." }));
+    }
+
+    #[test]
+    fn auth_errors_use_the_mock_apis_status_and_code() {
+        for (error, status, code) in [
+            (ApiError::check_input(Lang::En, Vec::new()), 400, ErrorCode::BadRequest),
+            (ApiError::sign_in_again(Lang::En), 401, ErrorCode::Unauthorized),
+            (ApiError::wrong_credentials(Lang::En), 401, ErrorCode::Unauthorized),
+            (ApiError::forbidden(Lang::En), 403, ErrorCode::Forbidden),
+            (ApiError::operator_provisioned(Lang::En), 403, ErrorCode::Forbidden),
+            (ApiError::internal(Lang::En), 500, ErrorCode::Internal),
+            (ApiError::no_database(Lang::En), 500, ErrorCode::Internal),
+        ] {
+            assert_eq!(error.status.as_u16(), status, "{}", error.body.message);
+            assert_eq!(error.body.code, code, "{}", error.body.message);
+        }
+        assert_eq!(ApiError::forbidden(Lang::Ko).body.message, "이 작업을 할 권한이 없습니다.");
     }
 }

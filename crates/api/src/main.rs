@@ -1,19 +1,62 @@
+use std::process::ExitCode;
 use std::time::Duration;
 
-use ax_api::{AppState, Config, router};
+use ax_api::cli::{Cli, Command};
+use ax_api::{AppState, Config, db, router};
+use clap::Parser;
+use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
-        .init();
+type BoxError = Box<dyn std::error::Error>;
 
+#[tokio::main]
+async fn main() -> ExitCode {
+    let cli = Cli::parse();
+    // PostgreSQL NOTICEs (e.g. "relation _sqlx_migrations already exists,
+    // skipping" on every migration run) are noise at info level.
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"))
+        .add_directive("sqlx::postgres::notice=warn".parse().expect("a valid directive"));
+    tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
+
+    match run(cli).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run(cli: Cli) -> Result<(), BoxError> {
     let config = Config::from_env()?;
-    let db = match &config.database_url {
-        Some(url) => {
-            Some(PgPoolOptions::new().max_connections(10).acquire_timeout(Duration::from_secs(3)).connect_lazy(url)?)
+    match cli.command.unwrap_or(Command::Serve) {
+        Command::Serve => serve(config).await,
+        Command::Migrate => {
+            db::migrate(&connect(&config)?).await?;
+            println!("migrations applied");
+            Ok(())
+        }
+        Command::User(command) => {
+            let pool = connect(&config)?;
+            db::migrate(&pool).await?;
+            ax_api::cli::run_user(&pool, command).await
+        }
+    }
+}
+
+fn connect(config: &Config) -> Result<PgPool, BoxError> {
+    let url = config.database_url.as_deref().ok_or("DATABASE_URL is not set")?;
+    Ok(PgPoolOptions::new().max_connections(10).acquire_timeout(Duration::from_secs(3)).connect_lazy(url)?)
+}
+
+async fn serve(config: Config) -> Result<(), BoxError> {
+    let db = match config.database_url {
+        Some(_) => {
+            let pool = connect(&config)?;
+            db::migrate(&pool).await?;
+            Some(pool)
         }
         None => {
             tracing::warn!("DATABASE_URL is not set; running without a database");
@@ -21,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let app = router(AppState { db }, &config);
+    let app = router(AppState { db, sessions: config.sessions }, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(
         addr = %config.bind,

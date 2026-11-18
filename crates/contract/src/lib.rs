@@ -62,12 +62,33 @@ pub fn operations() -> &'static [Operation] {
     })
 }
 
+/// The operation with this `operationId`.
+pub fn operation(id: &str) -> Option<&'static Operation> {
+    operations().iter().find(|op| op.id == id)
+}
+
+/// A named schema under `components.schemas` (`Value::Null` if there is none).
+pub fn schema(name: &str) -> &'static Value {
+    &document()["components"]["schemas"][name]
+}
+
+/// The values of an enum schema, e.g. `schema_enum("Role")`.
+pub fn schema_enum(name: &str) -> Vec<&'static str> {
+    strings(&schema(name)["enum"])
+}
+
+/// The `pattern` of one property of an object schema, e.g. `LoginBody.email`.
+pub fn property_pattern(schema_name: &str, property: &str) -> Option<&'static str> {
+    schema(schema_name)["properties"][property]["pattern"].as_str()
+}
+
 /// The error codes the contract allows in `ApiError.code`.
 pub fn error_codes() -> Vec<&'static str> {
-    document()["components"]["schemas"]["ApiError"]["properties"]["code"]["enum"]
-        .as_array()
-        .map(|codes| codes.iter().filter_map(Value::as_str).collect())
-        .unwrap_or_default()
+    strings(&schema("ApiError")["properties"]["code"]["enum"])
+}
+
+fn strings(value: &'static Value) -> Vec<&'static str> {
+    value.as_array().map(|items| items.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
 }
 
 /// The contract's own version (`info.version`).
@@ -113,6 +134,14 @@ mod tests {
         let codes = error_codes();
         assert!(codes.contains(&"not_found"));
         assert!(codes.contains(&"internal"));
+    }
+
+    #[test]
+    fn schemas_the_server_reads_are_present() {
+        assert_eq!(operation("login").map(|op| op.method.as_str()), Some("POST"));
+        assert!(operation("no-such-operation").is_none());
+        assert!(schema_enum("Role").contains(&"operator"));
+        assert!(property_pattern("LoginBody", "email").is_some_and(|p| p.starts_with('^')));
     }
 
     #[test]

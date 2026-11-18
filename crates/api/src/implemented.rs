@@ -2,11 +2,12 @@
 //!
 //! Every other operation in `contract/openapi.json` is routed to a `501`
 //! answer (see `routes`). When an operation gets a handler, add its
-//! `operationId` here and register the handler in `routes::implemented_routes`;
-//! a test checks that both lists agree with the contract.
+//! `operationId` here and an arm for its handler in `routes::implemented`.
+//! Building the router panics if the two disagree, and a test checks that every
+//! entry is in the contract.
 
 /// `operationId`s with a real handler, in contract order.
-pub const IMPLEMENTED: &[&str] = &[];
+pub const IMPLEMENTED: &[&str] = &["login", "logout", "me"];
 
 #[cfg(test)]
 mod tests {
