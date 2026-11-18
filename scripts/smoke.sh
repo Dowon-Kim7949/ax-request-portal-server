@@ -2,7 +2,7 @@
 # Checks a running stack end to end (after `docker compose -f deploy/compose.yaml up -d`):
 # the API reaches PostgreSQL, nginx serves the app, /api/ on the web origin
 # reaches the API with the contract's error body, and a person can sign in,
-# look themselves up and sign out through it.
+# manage people and teams, and sign out through it.
 #
 # Sign-in needs an account. The script provisions a fresh admin with a random
 # password through the server's CLI (no fixed or demo credentials); each run
@@ -33,8 +33,8 @@ curl -fsS "$API/healthz" | grep -q '"status":"ok"' || fail "/healthz is not ok"
 curl -fsS "$WEB/" | grep -q '<div id="root">' || fail "nginx does not serve the app"
 [[ "$(status "$WEB/mockServiceWorker.js")" == "404" ]] || fail "a real-backend build must not ship the mock service worker"
 
-[[ "$(status "$WEB/api/users")" == "501" ]] || fail "/api/users should reach the API (501 until implemented)"
-curl -s -H 'Accept-Language: en' "$WEB/api/users" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
+[[ "$(status "$WEB/api/projects")" == "501" ]] || fail "/api/projects should reach the API (501 until implemented)"
+curl -s -H 'Accept-Language: en' "$WEB/api/projects" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
 [[ "$(status "$WEB/api/no-such-route")" == "404" ]] || fail "unknown API paths must be 404"
 
 # --- sign-in ---------------------------------------------------------------
@@ -59,7 +59,34 @@ curl -fsS -H "Authorization: Bearer $token" "$WEB/api/auth/me" | grep -q "\"emai
 wrong="$(login "{\"email\":\"$email\",\"password\":\"not-the-password\"}")"
 grep -q '"message":"The email or password is incorrect."' <<<"$wrong" || fail "a wrong password must be refused: $wrong"
 
+# --- people and teams --------------------------------------------------------
+auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H 'Accept-Language: en')
+call() { curl -s -w '
+%{http_code}' "${auth[@]}" "$@"; }   # body, then the status on its own line
+code() { tail -n 1 <<<"$1"; }
+json() { sed '$d' <<<"$1"; }
+
+stamp="$(date +%s)-$RANDOM"
+r="$(call -X POST -d "{\"name\":\"Smoke $stamp\"}" "$WEB/api/teams")"
+[[ "$(code "$r")" == "201" ]] || fail "createTeam: $r"
+team_id="$(json "$r" | field id)"
+
+member="smoke-member-$stamp@example.com"
+r="$(call -X POST -d "{\"name\":\"Smoke Member\",\"email\":\"$member\",\"role\":\"requester\",\"teamId\":\"$team_id\"}" "$WEB/api/users")"
+[[ "$(code "$r")" == "201" ]] || fail "createUser: $r"
+member_id="$(json "$r" | field id)"
+[[ "$(json "$r" | field teamId)" == "$team_id" ]] || fail "createUser did not put the person in the team: $r"
+
+call "$WEB/api/users" | grep -q "\"email\":\"$member\"" || fail "listUsers does not list the new person"
+call "$WEB/api/teams" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listTeams does not list the new team"
+
+r="$(call -X PATCH -d '{"active":false,"teamId":null}' "$WEB/api/users/$member_id")"
+[[ "$(code "$r")" == "200" ]] && grep -q '"active":false' <<<"$r" || fail "updateUser: $r"
+
+r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"role\":\"operator\"}" "$WEB/api/users")"
+[[ "$(code "$r")" == "403" ]] || fail "an admin must not create an operator: $r"
+
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in, looked up and signed out $email)"
+echo "stack OK: $WEB -> $API (signed in as $email, added and changed a person and a team, signed out)"

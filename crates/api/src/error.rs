@@ -140,6 +140,37 @@ impl ApiError {
         )
     }
 
+    /// `400`: another account has this email, in any case (the mock's `emailTaken`).
+    pub fn email_taken(lang: Lang) -> Self {
+        Self::new(ErrorCode::BadRequest, lang.pick("이미 등록된 이메일입니다.", "This email is already registered."))
+    }
+
+    /// `400`: another team has this name, in any case (the mock's `teamNameTaken`).
+    pub fn team_name_taken(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::BadRequest,
+            lang.pick("같은 이름의 팀이 이미 있습니다.", "A team with this name already exists."),
+        )
+    }
+
+    /// `400`: an admin tried to deactivate themselves or change their own role (the mock's `cannotChangeSelf`).
+    pub fn cannot_change_self(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::BadRequest,
+            lang.pick("자신의 역할이나 활성 상태는 바꿀 수 없습니다.", "You cannot change your own role or status."),
+        )
+    }
+
+    /// `404` (the mock's `userNotFound`).
+    pub fn user_not_found(lang: Lang) -> Self {
+        Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))
+    }
+
+    /// `404` (the mock's `teamNotFound`).
+    pub fn team_not_found(lang: Lang) -> Self {
+        Self::new(ErrorCode::NotFound, lang.pick("팀을 찾을 수 없습니다.", "Team not found."))
+    }
+
     /// `500` (the mock's `unknown`). The cause goes to the log, not to the client.
     pub fn internal(lang: Lang) -> Self {
         Self::new(ErrorCode::Internal, lang.pick("알 수 없는 오류가 발생했습니다.", "An unexpected error occurred."))
@@ -149,6 +180,12 @@ impl ApiError {
     pub fn database(lang: Lang, error: &sqlx::Error) -> Self {
         tracing::error!(%error, "database error");
         Self::internal(lang)
+    }
+
+    /// The same as [`ApiError::database`], shaped for `map_err`:
+    /// `query.await.map_err(ApiError::db(lang))?`.
+    pub fn db(lang: Lang) -> impl Fn(sqlx::Error) -> Self {
+        move |error| Self::database(lang, &error)
     }
 
     /// `500` for an operation that needs the database when `DATABASE_URL` is unset.
@@ -212,6 +249,11 @@ mod tests {
             (ApiError::operator_provisioned(Lang::En), 403, ErrorCode::Forbidden),
             (ApiError::internal(Lang::En), 500, ErrorCode::Internal),
             (ApiError::no_database(Lang::En), 500, ErrorCode::Internal),
+            (ApiError::email_taken(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::team_name_taken(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::cannot_change_self(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::user_not_found(Lang::En), 404, ErrorCode::NotFound),
+            (ApiError::team_not_found(Lang::En), 404, ErrorCode::NotFound),
         ] {
             assert_eq!(error.status.as_u16(), status, "{}", error.body.message);
             assert_eq!(error.body.code, code, "{}", error.body.message);

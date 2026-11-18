@@ -5,74 +5,17 @@
 //! `scripts/cargo.sh test` and CI provide one. Each test gets its own fresh,
 //! migrated database.
 
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt;
+mod common;
+
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 
 use ax_api::accounts::{self, AccountError, NewAccount};
 use ax_api::auth::token;
-use ax_api::config::SessionPolicy;
+use ax_api::db;
 use ax_api::roles::Role;
-use ax_api::users::User;
-use ax_api::{AppState, Config, db, router};
-
-const PASSWORD: &str = "correct horse battery staple";
-
-fn app(pool: &PgPool) -> Router {
-    let config = Config::from_lookup(|_| None).unwrap();
-    router(AppState { db: Some(pool.clone()), sessions: SessionPolicy::default() }, &config)
-}
-
-async fn send(
-    pool: &PgPool,
-    method: &str,
-    path: &str,
-    token: Option<&str>,
-    lang: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut request = Request::builder().method(method).uri(path).header("accept-language", lang);
-    if let Some(token) = token {
-        request = request.header("authorization", format!("Bearer {token}"));
-    }
-    let body = body.map_or_else(Body::empty, |b| Body::from(b.to_string()));
-    let response = app(pool).oneshot(request.header("content-type", "application/json").body(body).unwrap()).await;
-    let response = response.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let body = if bytes.is_empty() { Value::Null } else { serde_json::from_slice(&bytes).unwrap() };
-    (status, body)
-}
-
-async fn login(pool: &PgPool, email: &str, password: &str, lang: &str) -> (StatusCode, Value) {
-    send(pool, "POST", "/auth/login", None, lang, Some(json!({ "email": email, "password": password }))).await
-}
-
-/// Signs in and returns the token.
-async fn token_for(pool: &PgPool, email: &str) -> String {
-    let (status, body) = login(pool, email, PASSWORD, "en").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    body["token"].as_str().unwrap().to_owned()
-}
-
-async fn me(pool: &PgPool, token: &str) -> (StatusCode, Value) {
-    send(pool, "GET", "/auth/me", Some(token), "en", None).await
-}
-
-async fn account(pool: &PgPool, email: &str, role: Role) -> User {
-    let new =
-        NewAccount { email: email.to_owned(), name: "Ada Lovelace".to_owned(), role, password: PASSWORD.to_owned() };
-    accounts::create(pool, new).await.unwrap()
-}
-
-fn signed_out(lang: &str) -> Value {
-    let message = if lang == "ko" { "다시 로그인해 주세요." } else { "Please sign in again." };
-    json!({ "code": "unauthorized", "message": message })
-}
+use common::*;
 
 #[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
 async fn sign_in_look_up_and_sign_out(pool: PgPool) {

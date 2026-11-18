@@ -3,8 +3,9 @@
 #   docker compose -f deploy/compose.yaml up --build
 #   open http://localhost:8088
 #
-# Development defaults only. For a real server, set POSTGRES_PASSWORD (and keep
-# it out of git), put TLS in front of "web", and see README "Deploy".
+# Settings come from deploy/.env (git ignores it; Compose reads it on its own):
+# copy deploy/.env.example and edit. Without it these are development defaults.
+# For a real server, set POSTGRES_PASSWORD and put TLS in front of "web".
 name: ax-portal
 
 services:
@@ -31,6 +32,8 @@ services:
     environment:
       DATABASE_URL: postgres://ax:${POSTGRES_PASSWORD:-ax}@db:5432/ax
       RUST_LOG: ${RUST_LOG:-info}
+      AX_SESSION_IDLE: ${AX_SESSION_IDLE:-24h}
+      AX_SESSION_MAX: ${AX_SESSION_MAX:-7d}
     depends_on:
       db:
         condition: service_healthy
