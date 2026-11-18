@@ -2,7 +2,8 @@
 # Checks a running stack end to end (after `docker compose -f deploy/compose.yaml up -d`):
 # the API reaches PostgreSQL, nginx serves the app, /api/ on the web origin
 # reaches the API with the contract's error body, and a person can sign in,
-# manage people and teams, and sign out through it.
+# manage people and teams, let a new person set a password through a setup
+# link, and sign out through it.
 #
 # Sign-in needs an account. The script provisions a fresh admin with a random
 # password through the server's CLI (no fixed or demo credentials); each run
@@ -80,6 +81,19 @@ member_id="$(json "$r" | field id)"
 call "$WEB/api/users" | grep -q "\"email\":\"$member\"" || fail "listUsers does not list the new person"
 call "$WEB/api/teams" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listTeams does not list the new team"
 
+# The person sets a password through a one-time setup link, then signs in with it.
+r="$(call -X POST "$WEB/api/users/$member_id/setup-link")"
+[[ "$(code "$r")" == "201" ]] || fail "createSetupLink: $r"
+link="$(json "$r" | field token)"
+member_password="$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n')"
+setup() { curl -s -w '\n%{http_code}' -H 'Content-Type: application/json' -H 'Accept-Language: en' \
+  -d "{\"token\":\"$link\",\"password\":\"$member_password\"}" "$WEB/api/auth/setup"; }
+r="$(setup)"
+[[ "$(code "$r")" == "200" ]] && [[ "$(json "$r" | field token)" == axs_* ]] || fail "completeSetup: $r"
+[[ "$(code "$(setup)")" == "401" ]] || fail "a setup link must work once"
+r="$(login "{\"email\":\"$member\",\"password\":\"$member_password\"}")"
+[[ "$(field role <<<"$r")" == "requester" ]] || fail "the password set through the link does not sign in: $r"
+
 r="$(call -X PATCH -d '{"active":false,"teamId":null}' "$WEB/api/users/$member_id")"
 [[ "$(code "$r")" == "200" ]] && grep -q '"active":false' <<<"$r" || fail "updateUser: $r"
 
@@ -89,4 +103,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email, added and changed a person and a team, signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team and a person, who set a password through a setup link; signed out)"
