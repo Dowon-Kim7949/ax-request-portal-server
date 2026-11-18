@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = ["crates/contract", "crates/api"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT"
+repository = "https://github.com/Dowon-Kim7949/ax-request-portal-server"
+publish = false
+
+[workspace.dependencies]
+ax-contract = { path = "crates/contract" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

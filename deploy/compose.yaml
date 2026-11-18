@@ -1,0 +1,53 @@
+# The whole stack on one machine: PostgreSQL, the API server and the frontend.
+#
+#   docker compose -f deploy/compose.yaml up --build
+#   open http://localhost:8088
+#
+# Development defaults only. For a real server, set POSTGRES_PASSWORD (and keep
+# it out of git), put TLS in front of "web", and see README "Deploy".
+name: ax-portal
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ax
+      POSTGRES_USER: ax
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ax}
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ax -d ax"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The frontend's nginx.conf proxies /api/ to http://ax-backend:8080/, so the
+  # service keeps that name.
+  ax-backend:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      DATABASE_URL: postgres://ax:${POSTGRES_PASSWORD:-ax}@db:5432/ax
+      RUST_LOG: ${RUST_LOG:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        # Same commit as contract/SOURCE; scripts/sync-contract.sh updates both.
+        FRONTEND_REF: ${FRONTEND_REF:-3052d1bc9973e8860f1df02a3b5daedd537db53d}
+    depends_on:
+      - ax-backend
+    ports:
+      - "8088:80"
+
+volumes:
+  db-data:

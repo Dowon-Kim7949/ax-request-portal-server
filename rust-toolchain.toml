@@ -1,0 +1,4 @@
+[toolchain]
+# Keep in step with the rust:<version> images in deploy/ and the CI cache key.
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]

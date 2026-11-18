@@ -1,0 +1,6371 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AX Request Portal API",
+    "version": "0.1.0",
+    "description": "Contract the AX Request Portal frontend expects. Generated from src/api/contract.ts — do not edit by hand.\n\nEvery request carries `Accept-Language` (`ko` or `en`, the language the user picked). Error messages, notification texts and AI-written text should come back in that language.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Same-origin (mock or reverse proxy)"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth"
+    },
+    {
+      "name": "users"
+    },
+    {
+      "name": "projects"
+    },
+    {
+      "name": "requests"
+    },
+    {
+      "name": "drafts"
+    },
+    {
+      "name": "notifications"
+    },
+    {
+      "name": "insights"
+    },
+    {
+      "name": "ai"
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Sign in and receive a bearer token",
+        "tags": [
+          "auth"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Sign out",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "me",
+        "summary": "Current user",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "summary": "User directory (names are shown on every request)",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUser",
+        "summary": "Invite a user (user:manage)",
+        "tags": [
+          "users"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "patch": {
+        "operationId": "updateUser",
+        "summary": "Change role, team or active flag (user:manage)",
+        "tags": [
+          "users"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams": {
+      "get": {
+        "operationId": "listTeams",
+        "summary": "Teams, by name (team names are shown with people and in AI usage)",
+        "tags": [
+          "users"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTeam",
+        "summary": "Add a team (user:manage); 400 when the name is taken",
+        "tags": [
+          "users"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}": {
+      "patch": {
+        "operationId": "updateTeam",
+        "summary": "Rename a team (user:manage); records follow it by id",
+        "tags": [
+          "users"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "Projects a request can target, with repository, wiki and owners",
+        "tags": [
+          "projects"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProject",
+        "summary": "Register a project (project:manage)",
+        "tags": [
+          "projects"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}": {
+      "put": {
+        "operationId": "updateProject",
+        "summary": "Update a project (project:manage)",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests": {
+      "get": {
+        "operationId": "listRequests",
+        "summary": "List requests visible to the current user",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RequestScope",
+              "default": "mine"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated RequestStatus values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Matches title or #id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequestSummaryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRequest",
+        "summary": "Submit a request. The AI starts the feasibility report immediately. 400 when an attachment is missing or was uploaded by someone else, with one issue per such attachment (path attachmentIds.<index>). With draftId, the caller's saved draft of that id is deleted along with the submission.",
+        "tags": [
+          "requests"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}": {
+      "get": {
+        "operationId": "getRequest",
+        "summary": "Full request with report, work run, checklist and timeline",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/precheck": {
+      "post": {
+        "operationId": "precheckRequest",
+        "summary": "One-shot submission check. Issues are advisory and never block submission.",
+        "tags": [
+          "requests"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestDraft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}/transitions": {
+      "post": {
+        "operationId": "transitionRequest",
+        "summary": "Move a request through its lifecycle (409 when the transition is not allowed)",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Transition not allowed in this status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}/verification": {
+      "put": {
+        "operationId": "saveVerification",
+        "summary": "Save QA checklist progress (requester, while in verification)",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationDraft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}/preview-feedback": {
+      "put": {
+        "operationId": "sendPreviewFeedback",
+        "summary": "The requester's reaction to the preview while the change is in code review (advisory; status unchanged)",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewFeedbackInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}/regression": {
+      "put": {
+        "operationId": "updateRegression",
+        "summary": "Record regression check results (responsible developer; 409 once the request is done, rejected or cancelled)",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegressionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests/{id}/release": {
+      "put": {
+        "operationId": "updateRelease",
+        "summary": "Set or change the planned release date (responsible developer; 400 when a new date is before today on the head-office calendar)",
+        "tags": [
+          "requests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/attachments": {
+      "post": {
+        "operationId": "uploadAttachment",
+        "summary": "Upload a screenshot or file (multipart field \"file\", max 10 MB)",
+        "tags": [
+          "requests"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/regression-checks": {
+      "get": {
+        "operationId": "regressionQueue",
+        "summary": "Open regression checks on requests the developer is responsible for",
+        "tags": [
+          "requests"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegressionQueue"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts": {
+      "get": {
+        "operationId": "listDrafts",
+        "summary": "The caller's saved drafts, most recently changed first (request:create)",
+        "tags": [
+          "drafts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedDraftSummaryList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDraft",
+        "summary": "Save a new draft (request:create). 409 limit_reached when the account already holds as many drafts as allowed (template setting drafts.maxPerAccount). 400 when an attachment is missing or was uploaded by someone else (path content.attachmentIds.<index>). Repeated with the same clientId, answers with the draft the first create made.",
+        "tags": [
+          "drafts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedDraftInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "limit_reached: the account holds as many saved drafts as allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts/{id}": {
+      "get": {
+        "operationId": "getDraft",
+        "summary": "One saved draft with its content and attachments (request:create). 404 for a draft that is not the caller's.",
+        "tags": [
+          "drafts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateDraft",
+        "summary": "Replace a draft's step and content (request:create); the answer carries the next version. 409 conflict when baseVersion is not the stored version (saved meanwhile, e.g. on another device). 404 for a draft that is not the caller's; attachments as in createDraft.",
+        "tags": [
+          "drafts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedDraftUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "conflict: the draft was saved since baseVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDraft",
+        "summary": "Delete a saved draft (request:create). 404 when it is gone or not the caller's, which a client can take as already deleted.",
+        "tags": [
+          "drafts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "listNotifications",
+        "summary": "Notifications for the current user, newest first",
+        "tags": [
+          "notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "operationId": "markNotificationRead",
+        "summary": "Mark one notification as read",
+        "tags": [
+          "notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "operationId": "markAllNotificationsRead",
+        "summary": "Mark every notification as read",
+        "tags": [
+          "notifications"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/notification-settings": {
+      "get": {
+        "operationId": "getNotificationSettings",
+        "summary": "Notification channels of the current user",
+        "tags": [
+          "notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateNotificationSettings",
+        "summary": "Update notification channels",
+        "tags": [
+          "notifications"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "operationId": "dashboard",
+        "summary": "Company-wide numbers for one month (dashboard:view)",
+        "tags": [
+          "insights"
+        ],
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "YYYY-MM (month 01–12), defaults to the current month",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases": {
+      "get": {
+        "operationId": "releases",
+        "summary": "Planned and past releases grouped by date and project, company-wide for every viewer (schedule:view); cancelled and rejected requests are left out",
+        "tags": [
+          "insights"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseScheduleList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/budget": {
+      "get": {
+        "operationId": "getBudget",
+        "summary": "AI spend against the monthly limit (budget:manage)",
+        "tags": [
+          "insights"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Budget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateBudget",
+        "summary": "Change AI cost limits (budget:manage)",
+        "tags": [
+          "insights"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Budget"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/settings": {
+      "get": {
+        "operationId": "getAiSettings",
+        "summary": "Provider connections, model per task and per-project overrides (agent:manage)",
+        "tags": [
+          "ai"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAiSettings",
+        "summary": "Choose the model per task and per project (agent:manage). Every selection must be a priced model of a connected provider.",
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiSettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/providers/{provider}/key": {
+      "put": {
+        "operationId": "setProviderKey",
+        "summary": "Store or replace a provider API key (agent:manage). The key is write-only.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiProvider"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConnection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeProviderKey",
+        "summary": "Disconnect a provider (agent:manage); refused while a task or project still uses it",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiProvider"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/pricing": {
+      "get": {
+        "operationId": "getAiPricing",
+        "summary": "Price table and exchange rate used to book AI usage (agent:manage or usage:view)",
+        "tags": [
+          "ai"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPricing"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAiPricing",
+        "summary": "Edit prices and the exchange rate (agent:manage). Applies to usage booked from now on.",
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiPricing"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPricing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/usage": {
+      "get": {
+        "operationId": "aiUsage",
+        "summary": "AI usage and estimated cost for one month by provider, model, task and request (usage:view)",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "YYYY-MM (month 01–12), defaults to the current month",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiUsageReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "AcceptanceCriterion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Phrased as \"when X, then Y\""
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ]
+      },
+      "Actor": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "user"
+              },
+              "userId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "userId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ai"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "system"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        ]
+      },
+      "AiPricing": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Date the prices were last checked against the providers"
+          },
+          "usdKrw": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "KRW per USD used to book new usage"
+          },
+          "models": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelPrice"
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "usdKrw",
+          "models"
+        ]
+      },
+      "AiProjectOverride": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/AiSelection"
+          }
+        },
+        "required": [
+          "projectId",
+          "task",
+          "selection"
+        ]
+      },
+      "AiProvider": {
+        "description": "anthropic = Claude models through the Claude API, and Claude Code for AI work; openai = GPT models through the OpenAI API, and Codex for AI work.",
+        "type": "string",
+        "enum": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      "AiRuntime": {
+        "description": "api = one model API call; claude_code / codex = a coding-agent run made of many calls.",
+        "type": "string",
+        "enum": [
+          "api",
+          "claude_code",
+          "codex"
+        ]
+      },
+      "AiSelection": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AiProvider"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provider's model id"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ]
+      },
+      "AiSettings": {
+        "type": "object",
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/AiTaskSelections"
+          },
+          "projectOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProjectOverride"
+            }
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderConnection"
+            }
+          }
+        },
+        "required": [
+          "defaults",
+          "projectOverrides",
+          "providers"
+        ]
+      },
+      "AiSettingsInput": {
+        "type": "object",
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/AiTaskSelections"
+          },
+          "projectOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProjectOverride"
+            }
+          }
+        },
+        "required": [
+          "defaults",
+          "projectOverrides"
+        ]
+      },
+      "AiTask": {
+        "description": "precheck = advice on a draft before submission; report = feasibility report; work = code change and merge request by a coding agent.",
+        "type": "string",
+        "enum": [
+          "precheck",
+          "report",
+          "work"
+        ]
+      },
+      "AiTaskSelections": {
+        "type": "object",
+        "properties": {
+          "precheck": {
+            "$ref": "#/components/schemas/AiSelection"
+          },
+          "report": {
+            "$ref": "#/components/schemas/AiSelection"
+          },
+          "work": {
+            "$ref": "#/components/schemas/AiSelection"
+          }
+        },
+        "required": [
+          "precheck",
+          "report",
+          "work"
+        ]
+      },
+      "AiUsageEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProvider"
+          },
+          "model": {
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/AiRuntime"
+          },
+          "requestId": {
+            "description": "Absent for a precheck, which runs before the request exists",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "userId": {
+            "type": "string",
+            "description": "The person whose action started the call. The feasibility report made automatically on submission counts against the requester who submitted"
+          },
+          "teamId": {
+            "description": "Id of the person's team when the call was booked, kept as it was; absent when they had none",
+            "type": "string"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage"
+          },
+          "costUsd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "costKrw": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "task",
+          "provider",
+          "model",
+          "runtime",
+          "userId",
+          "tokens",
+          "costUsd",
+          "costKrw"
+        ]
+      },
+      "AiUsageReport": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "totalKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "totalUsd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "calls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Model API calls and coding-agent runs booked in `month`"
+          },
+          "monthlyLimitKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "alertThresholdPct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "usdKrw": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exchange rate in the price table now; entries keep the rate they were booked at"
+          },
+          "pricingAsOf": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "byProvider": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "$ref": "#/components/schemas/AiProvider"
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "tokens": {
+                  "$ref": "#/components/schemas/TokenUsage"
+                }
+              },
+              "required": [
+                "provider",
+                "calls",
+                "costKrw",
+                "tokens"
+              ]
+            }
+          },
+          "byModel": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "$ref": "#/components/schemas/AiProvider"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "tokens": {
+                  "$ref": "#/components/schemas/TokenUsage"
+                }
+              },
+              "required": [
+                "provider",
+                "model",
+                "calls",
+                "costKrw",
+                "tokens"
+              ]
+            }
+          },
+          "byTask": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "$ref": "#/components/schemas/AiTask"
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "task",
+                "calls",
+                "costKrw"
+              ]
+            }
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                },
+                "provider": {
+                  "$ref": "#/components/schemas/AiProvider"
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "date",
+                "provider",
+                "costKrw"
+              ]
+            },
+            "description": "One row per day and provider with spending; days without spending are omitted"
+          },
+          "topRequests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "requestId": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "requestId",
+                "projectId",
+                "costKrw",
+                "calls"
+              ]
+            },
+            "description": "Most expensive requests in `month`, at most ten"
+          },
+          "byTeam": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "teamId": {
+                  "description": "Absent for calls by people without a team",
+                  "type": "string"
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "calls",
+                "costKrw"
+              ]
+            },
+            "description": "Spending by the team each call was booked under, most expensive first. Rows are by team id, so a renamed team stays one row; someone who moves keeps their earlier calls in the old team"
+          },
+          "byPerson": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "teamId": {
+                  "description": "The team of their latest call in `month`",
+                  "type": "string"
+                },
+                "calls": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costKrw": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "userId",
+                "calls",
+                "costKrw"
+              ]
+            },
+            "description": "Spending by the person who started each call, everyone with a call in `month`, most expensive first"
+          }
+        },
+        "required": [
+          "month",
+          "totalKrw",
+          "totalUsd",
+          "calls",
+          "monthlyLimitKrw",
+          "alertThresholdPct",
+          "usdKrw",
+          "pricingAsOf",
+          "byProvider",
+          "byModel",
+          "byTask",
+          "daily",
+          "topRequests",
+          "byTeam",
+          "byPerson"
+        ]
+      },
+      "ApiError": {
+        "description": "Error body for every 4xx/5xx response. 409 codes: invalid_transition and guard_failed (request lifecycle), conflict (a saved draft was saved again since it was read), limit_reached (no room for another saved draft).",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "bad_request",
+              "unauthorized",
+              "forbidden",
+              "not_found",
+              "invalid_transition",
+              "guard_failed",
+              "conflict",
+              "limit_reached",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "http(s) URL or a path on this site; data: (image/* or application/pdf) and blob: for files the browser keeps"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "size",
+          "mimeType",
+          "url"
+        ]
+      },
+      "Budget": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "monthlyLimitKrw": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "description": "Whole won; 0 = no limit"
+          },
+          "perRequestLimitKrw": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "description": "Whole won; 0 = no limit. Not above monthlyLimitKrw while both are set"
+          },
+          "alertThresholdPct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "spentKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "byModel": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "$ref": "#/components/schemas/AiProvider"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "spentKrw": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "provider",
+                "model",
+                "spentKrw"
+              ]
+            }
+          }
+        },
+        "required": [
+          "month",
+          "monthlyLimitKrw",
+          "perRequestLimitKrw",
+          "alertThresholdPct",
+          "spentKrw",
+          "byModel"
+        ]
+      },
+      "BudgetInput": {
+        "description": "Whole won up to 10,000,000,000; 0 = no limit. A per-request limit may not exceed a set monthly limit.",
+        "type": "object",
+        "properties": {
+          "monthlyLimitKrw": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "description": "Whole won; 0 = no limit"
+          },
+          "perRequestLimitKrw": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "description": "Whole won; 0 = no limit. Not above monthlyLimitKrw while both are set"
+          },
+          "alertThresholdPct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "monthlyLimitKrw",
+          "perRequestLimitKrw",
+          "alertThresholdPct"
+        ]
+      },
+      "ChecklistItem": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "The finding's own number, e.g. \"Finding 24\""
+          },
+          "clause": {
+            "description": "Clause of the standard, e.g. \"2.3.1\"",
+            "type": "string",
+            "maxLength": 60
+          },
+          "finding": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What the reviewer found, in their words"
+          },
+          "expected": {
+            "description": "What counts as fixed",
+            "type": "string",
+            "maxLength": 300
+          },
+          "id": {
+            "type": "string"
+          },
+          "criterionId": {
+            "type": "string",
+            "description": "The acceptance criterion made from this item"
+          }
+        },
+        "required": [
+          "ref",
+          "finding",
+          "id",
+          "criterionId"
+        ]
+      },
+      "ChecklistItemInput": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "The finding's own number, e.g. \"Finding 24\""
+          },
+          "clause": {
+            "description": "Clause of the standard, e.g. \"2.3.1\"",
+            "type": "string",
+            "maxLength": 60
+          },
+          "finding": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What the reviewer found, in their words"
+          },
+          "expected": {
+            "description": "What counts as fixed",
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "ref",
+          "finding"
+        ]
+      },
+      "ConstraintCheck": {
+        "type": "object",
+        "properties": {
+          "constraintId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "Copy of the project constraint when the report was written"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "boolean",
+            "description": "The plan, or the code it touches, breaks this constraint"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "constraintId",
+          "text",
+          "conflict",
+          "note"
+        ]
+      },
+      "CriterionCheck": {
+        "type": "object",
+        "properties": {
+          "criterionId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "passed",
+              "failed"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "criterionId",
+          "result"
+        ]
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "received": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "receivedPrevMonth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Received in the previous month over the same span of days (month-to-date while `month` is in progress)"
+          },
+          "inProgress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Open right now, regardless of `month`"
+          },
+          "delayed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Open right now and past the desired or scheduled date"
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Released during `month`"
+          },
+          "avgLeadTimeDays": {
+            "description": "Average days from submission to release, for requests released during `month`",
+            "type": "number",
+            "minimum": 0
+          },
+          "aiCostKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "aiBudgetKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "aiAlertThresholdPct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Share of `aiBudgetKrw` at which spending is flagged; the budget's `alertThresholdPct`"
+          },
+          "byProject": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "done": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "inProgress": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "projectId",
+                "done",
+                "inProgress"
+              ]
+            }
+          },
+          "upcomingReleases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "requestIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              "required": [
+                "date",
+                "projectId",
+                "requestIds"
+              ]
+            }
+          },
+          "attention": {
+            "type": "object",
+            "properties": {
+              "infoNeeded": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "delayedRequestIds": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            },
+            "required": [
+              "infoNeeded",
+              "delayedRequestIds"
+            ]
+          }
+        },
+        "required": [
+          "month",
+          "received",
+          "receivedPrevMonth",
+          "inProgress",
+          "delayed",
+          "done",
+          "aiCostKrw",
+          "aiBudgetKrw",
+          "aiAlertThresholdPct",
+          "byProject",
+          "upcomingReleases",
+          "attention"
+        ]
+      },
+      "DraftContent": {
+        "description": "A half-written request as the wizard holds it: the RequestDraft fields, every one optional and empty values allowed. Only abuse ceilings apply (text up to 10,000 characters, lists up to 50 items).",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestType"
+              },
+              {
+                "type": "string",
+                "const": ""
+              }
+            ]
+          },
+          "targetIds": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          "targetOther": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "currentBehavior": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "desiredBehavior": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "acceptanceCriteria": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "checklistSource": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "checklist": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "maxLength": 10000
+                },
+                "clause": {
+                  "type": "string",
+                  "maxLength": 10000
+                },
+                "finding": {
+                  "type": "string",
+                  "maxLength": 10000
+                },
+                "expected": {
+                  "type": "string",
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "ref",
+                "clause",
+                "finding",
+                "expected"
+              ]
+            }
+          },
+          "outOfScope": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "attachmentIds": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          "desiredDate": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "desiredDateReason": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        }
+      },
+      "FeasibilityReport": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/ReportVerdict"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "wikiDocs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "verified": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "title",
+                    "verified"
+                  ]
+                }
+              },
+              "codeFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "wikiDocs",
+              "codeFiles"
+            ]
+          },
+          "impact": {
+            "type": "object",
+            "properties": {
+              "changedScreens": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "recheck": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Existing features to re-check (regression candidates)"
+              }
+            },
+            "required": [
+              "changedScreens",
+              "recheck"
+            ]
+          },
+          "plan": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verification": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "automatable": {
+                  "type": "boolean"
+                },
+                "method": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "criterionId",
+                "automatable",
+                "method"
+              ]
+            }
+          },
+          "openQuestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportAssumption"
+            }
+          },
+          "constraintChecks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstraintCheck"
+            },
+            "description": "Every project constraint and how the plan keeps it; a conflict makes the verdict conditional"
+          },
+          "wikiTrust": {
+            "$ref": "#/components/schemas/WikiTrust"
+          },
+          "size": {
+            "$ref": "#/components/schemas/WorkSize"
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "generatedBy": {
+            "description": "Provider and model that wrote this revision",
+            "$ref": "#/components/schemas/AiSelection"
+          }
+        },
+        "required": [
+          "revision",
+          "generatedAt",
+          "verdict",
+          "summary",
+          "evidence",
+          "impact",
+          "plan",
+          "verification",
+          "openQuestions",
+          "assumptions",
+          "constraintChecks",
+          "wikiTrust",
+          "size",
+          "risks"
+        ]
+      },
+      "LoginBody": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "ModelPrice": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AiProvider"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inputUsd": {
+            "type": "number",
+            "minimum": 0,
+            "description": "USD per 1M input tokens"
+          },
+          "cacheReadUsd": {
+            "type": "number",
+            "minimum": 0,
+            "description": "USD per 1M cached input tokens"
+          },
+          "cacheWriteUsd": {
+            "type": "number",
+            "minimum": 0,
+            "description": "USD per 1M tokens written to the cache at the shortest TTL; 0 when not billed"
+          },
+          "outputUsd": {
+            "type": "number",
+            "minimum": 0,
+            "description": "USD per 1M output tokens"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "label",
+          "inputUsd",
+          "cacheReadUsd",
+          "cacheWriteUsd",
+          "outputUsd"
+        ]
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "body",
+          "createdAt"
+        ]
+      },
+      "NotificationList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Notification"
+        }
+      },
+      "NotificationSettings": {
+        "type": "object",
+        "properties": {
+          "inApp": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "boolean"
+          },
+          "messenger": {
+            "type": "boolean"
+          },
+          "onlyActionRequired": {
+            "type": "boolean",
+            "description": "Only notify when it is my turn to act"
+          }
+        },
+        "required": [
+          "inApp",
+          "email",
+          "messenger",
+          "onlyActionRequired"
+        ]
+      },
+      "PrecheckIssue": {
+        "description": "Shown next to the field. Never blocks submission.",
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "RequestDraft field name, e.g. \"acceptanceCriteria.0\""
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "severity",
+          "message"
+        ]
+      },
+      "PrecheckResult": {
+        "type": "object",
+        "properties": {
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrecheckIssue"
+            }
+          }
+        },
+        "required": [
+          "issues"
+        ]
+      },
+      "PreviewFeedback": {
+        "description": "The requester's reaction to the preview. Advisory: the developer still decides on the merge.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "by": {
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/PreviewVerdict"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "by",
+          "verdict"
+        ]
+      },
+      "PreviewFeedbackInput": {
+        "description": "A change request needs a note so the developer knows what to change.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "const": "looks_good"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "verdict"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "const": "needs_change"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "verdict",
+              "note"
+            ]
+          }
+        ]
+      },
+      "PreviewVerdict": {
+        "type": "string",
+        "enum": [
+          "looks_good",
+          "needs_change"
+        ]
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/ProjectIcon"
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/VcsProvider"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Absolute http(s) URL"
+              }
+            },
+            "required": [
+              "provider",
+              "url"
+            ]
+          },
+          "wikiPath": {
+            "type": "string"
+          },
+          "wikiStats": {
+            "type": "object",
+            "properties": {
+              "verifiedDocs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "totalDocs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "lastSyncedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "verifiedDocs",
+              "totalDocs"
+            ]
+          },
+          "ownerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Developers responsible for this project"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectTarget"
+            }
+          },
+          "constraints": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectConstraint"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "icon",
+          "repository",
+          "wikiPath",
+          "wikiStats",
+          "ownerIds",
+          "targets",
+          "constraints",
+          "active"
+        ]
+      },
+      "ProjectConstraint": {
+        "description": "A project rule the AI must respect when it plans and makes a change (security, data, operations). Kept by the project, so requesters never have to repeat it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "A rule every change must keep, in plain words"
+          },
+          "reference": {
+            "description": "Where the rule comes from, e.g. \"Security policy 3.2\"",
+            "type": "string",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ]
+      },
+      "ProjectIcon": {
+        "type": "string",
+        "enum": [
+          "globe",
+          "smartphone",
+          "layout-dashboard",
+          "server",
+          "box"
+        ]
+      },
+      "ProjectInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "icon": {
+            "$ref": "#/components/schemas/ProjectIcon"
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/VcsProvider"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Absolute http(s) URL"
+              }
+            },
+            "required": [
+              "provider",
+              "url"
+            ]
+          },
+          "wikiPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ownerIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "wikiDoc": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "constraints": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "description": "A rule every change must keep, in plain words"
+                },
+                "reference": {
+                  "description": "Where the rule comes from, e.g. \"Security policy 3.2\"",
+                  "type": "string",
+                  "maxLength": 60
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "icon",
+          "repository",
+          "wikiPath",
+          "ownerIds",
+          "targets",
+          "constraints",
+          "active"
+        ]
+      },
+      "ProjectList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Project"
+        }
+      },
+      "ProjectTarget": {
+        "description": "A screen or feature a requester can pick. Normally extracted from the project wiki.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "wikiDoc": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "ProviderConnection": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AiProvider"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "keyHint": {
+            "description": "Last four characters of the stored key; the key itself is never returned",
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "provider",
+          "connected"
+        ]
+      },
+      "ProviderKeyInput": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 500,
+            "description": "Write-only: stored by the server, never returned"
+          }
+        },
+        "required": [
+          "apiKey"
+        ]
+      },
+      "RegressionCheck": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "Wiki doc linked to the changed code"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "passed",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source",
+          "result"
+        ]
+      },
+      "RegressionQueue": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "title": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/components/schemas/RequestStatus"
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/RegressionCheck"
+              }
+            }
+          },
+          "required": [
+            "requestId",
+            "title",
+            "projectId",
+            "status",
+            "checks"
+          ]
+        }
+      },
+      "RegressionUpdate": {
+        "type": "object",
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "passed",
+                    "failed"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "result"
+              ]
+            }
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      },
+      "Release": {
+        "type": "object",
+        "properties": {
+          "scheduledDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "releasedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "ReleaseInput": {
+        "type": "object",
+        "properties": {
+          "scheduledDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "ReleaseScheduleItem": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "$ref": "#/components/schemas/RequestStatus"
+                },
+                "canOpen": {
+                  "type": "boolean",
+                  "description": "Whether the viewer may open the request; the schedule lists every request, not only readable ones"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "status",
+                "canOpen"
+              ]
+            }
+          }
+        },
+        "required": [
+          "date",
+          "projectId",
+          "requests"
+        ]
+      },
+      "ReleaseScheduleList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ReleaseScheduleItem"
+        }
+      },
+      "ReportAssumption": {
+        "description": "A fact the plan relies on that neither the code nor a reviewed wiki confirmed. The developer checks each one before the AI starts work.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ]
+      },
+      "ReportVerdict": {
+        "type": "string",
+        "enum": [
+          "feasible",
+          "conditional",
+          "out_of_scope",
+          "undetermined"
+        ]
+      },
+      "RequestAiUsage": {
+        "type": "object",
+        "properties": {
+          "spentKrw": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Estimated AI cost booked against this request so far"
+          },
+          "limitKrw": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Per-request limit; 0 = no limit"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiUsageEntry"
+            }
+          }
+        },
+        "required": [
+          "spentKrw",
+          "limitKrw",
+          "entries"
+        ]
+      },
+      "RequestDraft": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "targetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetOther": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "currentBehavior": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "desiredBehavior": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "acceptanceCriteria": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "text"
+              ]
+            },
+            "description": "1–5; ignored for checklist requests"
+          },
+          "checklistSource": {
+            "description": "Who raised the findings, e.g. \"Security audit, on-site review\"",
+            "type": "string",
+            "maxLength": 100
+          },
+          "checklist": {
+            "description": "Checklist requests only: each item becomes an acceptance criterion",
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItemInput"
+            }
+          },
+          "outOfScope": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "attachmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "desiredDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "desiredDateReason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "projectId",
+          "type",
+          "title",
+          "targetIds",
+          "currentBehavior",
+          "desiredBehavior",
+          "acceptanceCriteria",
+          "attachmentIds"
+        ]
+      },
+      "RequestScope": {
+        "description": "mine = filed by me; assigned = projects I own or requests assigned to me; all = everything (needs request:read:all)",
+        "type": "string",
+        "enum": [
+          "mine",
+          "assigned",
+          "all"
+        ]
+      },
+      "RequestStatus": {
+        "description": "See src/domain/lifecycle.ts for the transition table.",
+        "type": "string",
+        "enum": [
+          "submitted",
+          "reporting",
+          "scope_check",
+          "review",
+          "info_needed",
+          "rejected",
+          "in_progress",
+          "code_review",
+          "verification",
+          "changes_requested",
+          "release_scheduled",
+          "done",
+          "cancelled"
+        ]
+      },
+      "RequestSubmission": {
+        "description": "Body of createRequest: the RequestDraft, plus the saved draft it came from",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "targetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetOther": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "currentBehavior": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "desiredBehavior": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "acceptanceCriteria": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "text"
+              ]
+            },
+            "description": "1–5; ignored for checklist requests"
+          },
+          "checklistSource": {
+            "description": "Who raised the findings, e.g. \"Security audit, on-site review\"",
+            "type": "string",
+            "maxLength": 100
+          },
+          "checklist": {
+            "description": "Checklist requests only: each item becomes an acceptance criterion",
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItemInput"
+            }
+          },
+          "outOfScope": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "attachmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "desiredDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "desiredDateReason": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "draftId": {
+            "description": "The saved draft the request was written in. Once the request is created, that draft is deleted in the same operation if it is the caller's; otherwise it is ignored.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "type",
+          "title",
+          "targetIds",
+          "currentBehavior",
+          "desiredBehavior",
+          "acceptanceCriteria",
+          "attachmentIds"
+        ]
+      },
+      "RequestType": {
+        "description": "checklist = findings from an outside review (audit, inspection, certification) handled item by item",
+        "type": "string",
+        "enum": [
+          "new_feature",
+          "change",
+          "bug",
+          "copy_design",
+          "non_code",
+          "checklist"
+        ]
+      },
+      "Role": {
+        "description": "requester = planning/sales staff who file requests; executive = requester + company-wide dashboard; developer = reviews reports, runs AI work, approves merges; admin = manages projects and users; operator = runs the service itself: AI providers and models, prices, AI budget and usage. Operator accounts are provisioned by the service, not by an admin.",
+        "type": "string",
+        "enum": [
+          "requester",
+          "executive",
+          "developer",
+          "admin",
+          "operator"
+        ]
+      },
+      "SavedDraft": {
+        "description": "A saved draft with everything needed to continue it, on this device or another",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?!local-)[A-Za-z0-9_-]{1,100}$",
+            "description": "Opaque: 1–100 letters, digits, \"-\" or \"_\", never starting with \"local-\" (clients use that prefix for drafts not yet on the server)"
+          },
+          "title": {
+            "type": "string",
+            "description": "content.title without surrounding spaces; empty when there is none"
+          },
+          "projectId": {
+            "description": "content.projectId, once one is picked",
+            "type": "string"
+          },
+          "type": {
+            "description": "content.type, once one is picked",
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "description": "Wizard step the person was last on (0–6)"
+          },
+          "attachmentCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many attachments SavedDraft.attachments holds"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "1 when created, one more on every update; an update sends it back as baseVersion"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "content": {
+            "$ref": "#/components/schemas/DraftContent"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            },
+            "description": "The attachments of content.attachmentIds that still exist and were uploaded by the caller, each once, in that order"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "step",
+          "attachmentCount",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "content",
+          "attachments"
+        ]
+      },
+      "SavedDraftInput": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "content": {
+            "$ref": "#/components/schemas/DraftContent"
+          },
+          "clientId": {
+            "description": "The client's own id for the draft. A create repeated with a clientId that already made one of the caller's drafts (the first answer was lost) makes no new draft: the answer is that draft as it is now, unchanged, and is not refused for the per-account limit.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "step",
+          "content"
+        ]
+      },
+      "SavedDraftSummary": {
+        "description": "One of the caller's saved drafts, as a list shows it",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?!local-)[A-Za-z0-9_-]{1,100}$",
+            "description": "Opaque: 1–100 letters, digits, \"-\" or \"_\", never starting with \"local-\" (clients use that prefix for drafts not yet on the server)"
+          },
+          "title": {
+            "type": "string",
+            "description": "content.title without surrounding spaces; empty when there is none"
+          },
+          "projectId": {
+            "description": "content.projectId, once one is picked",
+            "type": "string"
+          },
+          "type": {
+            "description": "content.type, once one is picked",
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "description": "Wizard step the person was last on (0–6)"
+          },
+          "attachmentCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many attachments SavedDraft.attachments holds"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "1 when created, one more on every update; an update sends it back as baseVersion"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "step",
+          "attachmentCount",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SavedDraftSummaryList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/SavedDraftSummary"
+        }
+      },
+      "SavedDraftUpdate": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "content": {
+            "$ref": "#/components/schemas/DraftContent"
+          },
+          "baseVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The version the content was based on; 409 conflict when the draft has been saved since"
+          }
+        },
+        "required": [
+          "step",
+          "content",
+          "baseVersion"
+        ]
+      },
+      "ScopeDecision": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "by": {
+            "type": "string",
+            "description": "User id of the requester"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "questionId": {
+                  "type": "string"
+                },
+                "optionId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "questionId",
+                "optionId"
+              ]
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "by",
+          "choices"
+        ]
+      },
+      "ScopeProposal": {
+        "description": "The AI's reading of the request in the requester's words, written with the feasibility report.",
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Report revision this was written with"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Two or three plain sentences, no technical terms"
+          },
+          "changes": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What will change"
+          },
+          "unchanged": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What this request will not change"
+          },
+          "questions": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScopeQuestion"
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "summary",
+          "changes",
+          "unchanged",
+          "questions"
+        ]
+      },
+      "ScopeQuestion": {
+        "description": "A choice the requester makes where the request can be read more than one way.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "options": {
+            "minItems": 2,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ]
+            }
+          },
+          "recommended": {
+            "description": "Option id the AI would pick; never preselected",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "options"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token for the Authorization header"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "token",
+          "user"
+        ]
+      },
+      "Team": {
+        "description": "A team people belong to. Records refer to it by id, so renaming a team carries its history with it; teams are never deleted, because past usage still points at them.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Unique within the organization, ignoring case"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "TeamInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Unique within the organization, ignoring case"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "TeamList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Team"
+        }
+      },
+      "TimelineEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "event": {
+            "type": "string",
+            "description": "Lifecycle event name or \"created\" / \"comment\" / \"release_updated\""
+          },
+          "from": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "to": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "event"
+        ]
+      },
+      "TokenUsage": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Input tokens billed at the full input rate (cache reads and writes excluded)"
+          },
+          "cacheRead": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Input tokens served from the prompt cache"
+          },
+          "cacheWrite": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Input tokens written to the prompt cache"
+          },
+          "output": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Output tokens, reasoning included"
+          },
+          "reasoning": {
+            "description": "Part of `output` spent on reasoning, when the provider reports it",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "input",
+          "cacheRead",
+          "cacheWrite",
+          "output"
+        ]
+      },
+      "TransitionCommand": {
+        "description": "Body of POST /requests/{id}/transitions. AI and system events are not accepted from clients.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "requestInfo"
+              },
+              "questions": {
+                "minItems": 1,
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "event",
+              "questions"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "provideInfo"
+              },
+              "answer": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "event",
+              "answer"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "approveScope"
+              },
+              "choices": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "questionId": {
+                      "type": "string"
+                    },
+                    "optionId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "questionId",
+                    "optionId"
+                  ]
+                }
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "event",
+              "choices"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "reviseScope"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "event",
+              "note"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "reject"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "event",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "runWork"
+              },
+              "instructions": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "checkedAssumptions": {
+                "description": "Ids of the report's assumptions the developer confirmed; all of them on the first run",
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "event"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "requestRevision"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "event",
+              "note"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "approveMerge"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "reportIssue"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "criterionId": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "passed",
+                        "failed"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "criterionId",
+                    "result"
+                  ]
+                }
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "event",
+              "checks"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "confirmResult"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "criterionId": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "passed",
+                        "failed"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "criterionId",
+                    "result"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "event",
+              "checks"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "markReleased"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "cancel"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "event"
+            ]
+          }
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "teamId": {
+            "description": "Id of the Team the person belongs to; absent for no team",
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "active"
+        ]
+      },
+      "UserCreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "teamId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "role"
+        ]
+      },
+      "UserList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/User"
+        }
+      },
+      "UserPatch": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "teamId": {
+            "description": "null takes the person out of their team",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VcsProvider": {
+        "type": "string",
+        "enum": [
+          "gitlab",
+          "github"
+        ]
+      },
+      "VerificationDraft": {
+        "description": "Saves checklist progress without changing status. Submit with confirmResult / reportIssue.",
+        "type": "object",
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "criterionId": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "passed",
+                    "failed"
+                  ]
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "criterionId",
+                "result"
+              ]
+            }
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      },
+      "WikiTrust": {
+        "description": "Derived from wiki review state of the evidence documents, never from model judgement.",
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      },
+      "WorkPhase": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "editing",
+          "testing",
+          "opening_mr",
+          "finished"
+        ]
+      },
+      "WorkPreview": {
+        "description": "What the requester can look at before the merge. Filled by CI or the coding agent; costs no AI.",
+        "type": "object",
+        "properties": {
+          "url": {
+            "description": "A running build of the change, e.g. a preview deployment (http(s) URL or a path on this site)",
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "screenshots": {
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri-reference",
+                  "description": "Image URL: http(s), a path on this site, data:image/* or blob:"
+                },
+                "alt": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "url",
+                "alt"
+              ]
+            }
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "screenshots"
+        ]
+      },
+      "WorkRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "targetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetOther": {
+            "type": "string"
+          },
+          "currentBehavior": {
+            "type": "string"
+          },
+          "desiredBehavior": {
+            "type": "string"
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterion"
+            }
+          },
+          "checklistSource": {
+            "type": "string"
+          },
+          "checklist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "outOfScope": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "desiredDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "desiredDateReason": {
+            "type": "string"
+          },
+          "requesterId": {
+            "type": "string"
+          },
+          "assigneeId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "precheck": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrecheckIssue"
+            }
+          },
+          "infoRequest": {
+            "type": "object",
+            "properties": {
+              "questions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "answer": {
+                "type": "string"
+              },
+              "askedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "questions",
+              "askedAt"
+            ]
+          },
+          "rejectionReason": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/FeasibilityReport"
+          },
+          "scope": {
+            "description": "Scope the requester confirmed (or is asked to); the developer and the AI work from it",
+            "type": "object",
+            "properties": {
+              "proposal": {
+                "$ref": "#/components/schemas/ScopeProposal"
+              },
+              "decision": {
+                "$ref": "#/components/schemas/ScopeDecision"
+              }
+            },
+            "required": [
+              "proposal"
+            ]
+          },
+          "work": {
+            "$ref": "#/components/schemas/WorkRun"
+          },
+          "regression": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegressionCheck"
+            }
+          },
+          "verification": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CriterionCheck"
+            }
+          },
+          "release": {
+            "$ref": "#/components/schemas/Release"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            }
+          },
+          "aiUsage": {
+            "description": "Returned only to users with report:read",
+            "$ref": "#/components/schemas/RequestAiUsage"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "projectId",
+          "type",
+          "targetIds",
+          "currentBehavior",
+          "desiredBehavior",
+          "acceptanceCriteria",
+          "attachments",
+          "requesterId",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "precheck",
+          "regression",
+          "verification",
+          "timeline"
+        ]
+      },
+      "WorkRequestSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/RequestType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RequestStatus"
+          },
+          "requesterId": {
+            "type": "string"
+          },
+          "assigneeId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "desiredDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/ReportVerdict"
+          },
+          "workPhase": {
+            "$ref": "#/components/schemas/WorkPhase"
+          },
+          "scheduledDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "projectId",
+          "type",
+          "status",
+          "requesterId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "WorkRequestSummaryList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/WorkRequestSummary"
+        }
+      },
+      "WorkRun": {
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/WorkPhase"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "tests_failed",
+              "error"
+            ]
+          },
+          "instructions": {
+            "description": "Developer memo or revision note passed to the AI",
+            "type": "string"
+          },
+          "checkedAssumptions": {
+            "description": "Report assumption ids the developer confirmed before this run started",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "branch": {
+            "type": "string"
+          },
+          "mergeRequest": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "url": {
+                "type": "string",
+                "format": "uri-reference",
+                "description": "http(s) URL of the merge request"
+              },
+              "filesChanged": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "additions": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "deletions": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "number",
+              "url",
+              "filesChanged",
+              "additions",
+              "deletions"
+            ]
+          },
+          "tests": {
+            "type": "object",
+            "properties": {
+              "existingPassed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "existingTotal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "criteriaPassed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "criteriaTotal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "existingPassed",
+              "existingTotal",
+              "criteriaPassed",
+              "criteriaTotal"
+            ]
+          },
+          "wikiChanges": {
+            "description": "Wiki docs edited in the same merge request; always pending human review",
+            "type": "object",
+            "properties": {
+              "docs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "pendingReview": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "docs",
+              "pendingReview"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/WorkPreview"
+          },
+          "previewFeedback": {
+            "description": "Reset with every new run",
+            "$ref": "#/components/schemas/PreviewFeedback"
+          },
+          "costKrw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "agent": {
+            "description": "Coding agent and model that made this run",
+            "type": "object",
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/AiProvider"
+              },
+              "model": {
+                "type": "string"
+              },
+              "runtime": {
+                "$ref": "#/components/schemas/AiRuntime"
+              }
+            },
+            "required": [
+              "provider",
+              "model",
+              "runtime"
+            ]
+          }
+        },
+        "required": [
+          "attempt",
+          "startedAt",
+          "phase",
+          "branch"
+        ]
+      },
+      "WorkSize": {
+        "type": "string",
+        "enum": [
+          "S",
+          "M",
+          "L"
+        ]
+      }
+    }
+  }
+}
