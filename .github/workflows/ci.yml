@@ -17,6 +17,21 @@ jobs:
     name: fmt, clippy, test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The database tests (#[sqlx::test]) make a fresh database per test here.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ax
+          POSTGRES_PASSWORD: ax
+          POSTGRES_DB: ax
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ax -d ax"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v7
       # Installs the toolchain and components named in rust-toolchain.toml.
@@ -25,6 +40,8 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+        env:
+          DATABASE_URL: postgres://ax:ax@localhost:5432/ax
 
   contract:
     name: contract matches the pinned frontend commit

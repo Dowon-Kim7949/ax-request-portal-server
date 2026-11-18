@@ -1,10 +1,12 @@
 //! Server settings, read from the environment.
 //!
-//! | Variable       | Default        | Meaning                                                    |
-//! | -------------- | -------------- | ---------------------------------------------------------- |
-//! | `AX_BIND`      | `0.0.0.0:8080` | Address to listen on                                       |
-//! | `AX_BASE_PATH` | `/`            | Path the contract is mounted at (see below)                |
-//! | `DATABASE_URL` | unset          | PostgreSQL URL; unset runs without a database (dev, tests) |
+//! | Variable          | Default        | Meaning                                                    |
+//! | ----------------- | -------------- | ---------------------------------------------------------- |
+//! | `AX_BIND`         | `0.0.0.0:8080` | Address to listen on                                       |
+//! | `AX_BASE_PATH`    | `/`            | Path the contract is mounted at (see below)                |
+//! | `DATABASE_URL`    | unset          | PostgreSQL URL; unset runs without a database (dev, tests) |
+//! | `AX_SESSION_IDLE` | `24h`          | A sign-in ends after this long unused (`s`, `m`, `h`, `d`) |
+//! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -12,6 +14,7 @@
 
 use std::fmt;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -19,6 +22,41 @@ pub struct Config {
     /// `/` or a path without a trailing slash, e.g. `/api`.
     pub base_path: String,
     pub database_url: Option<String>,
+    pub sessions: SessionPolicy,
+}
+
+/// How long a sign-in lasts. Each use moves the end `idle` ahead, but never
+/// past `max` after sign-in. There is no refresh: the frontend signs in again
+/// after a `401`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionPolicy {
+    pub idle: Duration,
+    pub max: Duration,
+}
+
+impl Default for SessionPolicy {
+    fn default() -> Self {
+        Self { idle: Duration::from_secs(24 * HOUR), max: Duration::from_secs(7 * DAY) }
+    }
+}
+
+const MINUTE: u64 = 60;
+const HOUR: u64 = 60 * MINUTE;
+const DAY: u64 = 24 * HOUR;
+
+/// `90s`, `15m`, `24h`, `7d`.
+fn parse_duration(value: &str) -> Option<Duration> {
+    let split = value.find(|c: char| !c.is_ascii_digit())?;
+    let (number, unit) = value.split_at(split);
+    let unit = match unit {
+        "s" => 1,
+        "m" => MINUTE,
+        "h" => HOUR,
+        "d" => DAY,
+        _ => return None,
+    };
+    let seconds = number.parse::<u64>().ok()?.checked_mul(unit)?;
+    (seconds > 0).then(|| Duration::from_secs(seconds))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +97,21 @@ impl Config {
         }
         let base_path = if base_path == "/" { base_path } else { base_path.trim_end_matches('/').to_owned() };
 
-        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL") })
+        let duration = |name: &str, default: Duration| match non_empty(name) {
+            None => Ok(default),
+            Some(value) => parse_duration(&value)
+                .ok_or_else(|| ConfigError(format!("{name} must be a duration such as 30m, 24h or 7d, got {value:?}"))),
+        };
+        let defaults = SessionPolicy::default();
+        let sessions = SessionPolicy {
+            idle: duration("AX_SESSION_IDLE", defaults.idle)?,
+            max: duration("AX_SESSION_MAX", defaults.max)?,
+        };
+        if sessions.idle > sessions.max {
+            return Err(ConfigError("AX_SESSION_IDLE must not be longer than AX_SESSION_MAX".to_owned()));
+        }
+
+        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions })
     }
 }
 
@@ -80,6 +132,21 @@ mod tests {
         assert_eq!(c.bind.to_string(), "0.0.0.0:8080");
         assert_eq!(c.base_path, "/");
         assert_eq!(c.database_url, None);
+        assert_eq!(c.sessions.idle, Duration::from_secs(24 * 3600));
+        assert_eq!(c.sessions.max, Duration::from_secs(7 * 24 * 3600));
+    }
+
+    #[test]
+    fn session_lifetimes() {
+        let c = config(&[("AX_SESSION_IDLE", "30m"), ("AX_SESSION_MAX", "12h")]).unwrap();
+        assert_eq!(c.sessions.idle, Duration::from_secs(30 * 60));
+        assert_eq!(c.sessions.max, Duration::from_secs(12 * 3600));
+        assert_eq!(config(&[("AX_SESSION_IDLE", "90s")]).unwrap().sessions.idle, Duration::from_secs(90));
+
+        for bad in ["0h", "24", "h", "1w", "-1h", "1.5h", "99999999999999999999d"] {
+            assert!(config(&[("AX_SESSION_IDLE", bad)]).is_err(), "{bad}");
+        }
+        assert!(config(&[("AX_SESSION_IDLE", "8d")]).is_err(), "idle longer than the default max");
     }
 
     #[test]

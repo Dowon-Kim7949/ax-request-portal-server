@@ -39,6 +39,11 @@ impl Lang {
         best.map_or_else(Self::default, |(lang, _)| lang)
     }
 
+    /// The language of a request, from its headers.
+    pub fn of(headers: &axum::http::HeaderMap) -> Self {
+        Self::from_header(headers.get(ACCEPT_LANGUAGE).and_then(|v| v.to_str().ok()))
+    }
+
     /// The text for this language.
     pub const fn pick<'a>(self, ko: &'a str, en: &'a str) -> &'a str {
         match self {
@@ -52,7 +57,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Lang {
     type Rejection = Infallible;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(Self::from_header(parts.headers.get(ACCEPT_LANGUAGE).and_then(|v| v.to_str().ok())))
+        Ok(Self::of(&parts.headers))
     }
 }
 
