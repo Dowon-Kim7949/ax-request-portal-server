@@ -6,9 +6,11 @@
 //! of a 404, and syncing a newer contract makes new operations show up at once.
 
 pub mod config;
+pub mod db;
 pub mod error;
 pub mod implemented;
 pub mod lang;
+pub mod roles;
 pub mod routes;
 pub mod state;
 

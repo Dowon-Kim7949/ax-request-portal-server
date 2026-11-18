@@ -13,6 +13,14 @@ publish = false
 [workspace.dependencies]
 ax-contract = { path = "crates/contract" }
 
+# Password hashing (Argon2id, 19 MiB) is slow without optimisation; the debug
+# builds that tests use would spend seconds per sign-in.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
