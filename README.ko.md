@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀.** 로그인(`login`, `me`, `logout`)과 사용자·팀(`listUsers`, `createUser`, `updateUser`, `listTeams`, `createTeam`, `updateTeam`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 35개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 일회용 설정 링크입니다. 앱에서 추가된 사람이 링크로 직접 비밀번호를 정합니다. 그다음 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)를 합니다.
+> **현재 상태: 로그인, 사용자·팀.** 로그인(`login`, `me`, `logout`, `completeSetup`)과 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 35개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
 
 ## 계약을 맞추는 방법
 
@@ -80,7 +80,10 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - API로는 아무도 운영자를 만들거나 바꿀 수 없습니다(`403`).
 - 삭제는 없습니다. 사용자를 비활성화하면 그 사람의 세션이 바로 끝납니다. 팀은 이름만 바꾸며, 기록이 팀을 id로 가리키므로 이름을 바꿔도 연결이 유지됩니다.
 - 검사 순서도 목 API와 같습니다. 세션(`401`), 본문(`400`, 문제를 `issues`에 모두 나열), 권한(`403`), 그다음 operation 규칙 순입니다.
-- API로 추가한 사람은 아직 비밀번호가 없어서 로그인할 수 없습니다. 설정 링크가 나오기 전까지는 `ax-api user set-password`로 정해 줍니다.
+- API로 추가한 사람은 아직 비밀번호가 없습니다. 관리자가 그 사람의 일회용 **설정 링크**를 만들면(`POST /users/{id}/setup-link`, `201 { token, expiresAt }`) 프런트엔드가 `/setup#token=…` 링크로 보여 줍니다. 링크를 받은 사람은 그 화면에서 비밀번호를 정하고(`POST /auth/setup`, 공개) 바로 로그인됩니다.
+  - 링크는 한 번만 쓸 수 있고 `AX_SETUP_LINK_TTL`(72시간) 동안 유효합니다. 한 사람에게는 가장 최근 링크 하나만 유효합니다. 비밀번호를 잊은 사람에게는 새 링크를 만들어 주면 되고, 그 링크를 쓰는 순간 그 사람의 다른 세션은 모두 끝납니다.
+  - 운영자(`403`, 대신 `ax-api user set-password`를 씁니다)와 비활성 사용자(`400`)에게는 링크를 만들 수 없습니다. 사용자를 비활성화하면 아직 쓰지 않은 링크도 함께 지웁니다. 없는 링크, 이미 쓴 링크, 만료된 링크는 로그인 실패처럼 `401`입니다.
+  - 토큰은 세션 토큰처럼 SHA-256 해시만 저장합니다. 브라우저는 URL 프래그먼트를 서버로 보내지 않으므로 서버 로그에도 남지 않습니다.
 
 ## 설정
 
@@ -93,6 +96,7 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `DATABASE_URL` | 없음 | PostgreSQL 주소. 없으면 DB 없이 동작합니다(`/readyz`가 `not_configured`, 로그인은 `500`). |
 | `AX_SESSION_IDLE` | `24h` | 이 시간 동안 쓰지 않으면 로그인이 끝납니다(`s`, `m`, `h`, `d`) |
 | `AX_SESSION_MAX` | `7d` | 얼마나 쓰든 로그인한 뒤 이 시간이 지나면 끝납니다 |
+| `AX_SETUP_LINK_TTL` | `72h` | 일회용 설정 링크가 유효한 시간 |
 | `RUST_LOG` | `info` | 로그 필터 |
 
 상태 확인: `GET /healthz`(프로세스, 버전, 고정한 계약 커밋)와 `GET /readyz`(DB 연결)는 `AX_BASE_PATH`와 상관없이 루트에 있습니다.

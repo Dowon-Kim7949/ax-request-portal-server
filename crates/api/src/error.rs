@@ -161,6 +161,29 @@ impl ApiError {
         )
     }
 
+    /// `400`: a setup link for a deactivated person (the mock's `setupLinkInactive`).
+    pub fn setup_link_inactive(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::BadRequest,
+            lang.pick(
+                "비활성 사용자에게는 링크를 만들 수 없습니다. 먼저 활성화해 주세요.",
+                "Activate this person before making a link.",
+            ),
+        )
+    }
+
+    /// `401` from `completeSetup`: an unknown, used or expired link, or a
+    /// deactivated account (the mock's `setupLinkInvalid`).
+    pub fn setup_link_invalid(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Unauthorized,
+            lang.pick(
+                "링크가 올바르지 않거나 이미 쓰였거나 만료되었습니다. 관리자에게 새 링크를 요청해 주세요.",
+                "This link is not valid, was already used or has expired. Ask your admin for a new one.",
+            ),
+        )
+    }
+
     /// `404` (the mock's `userNotFound`).
     pub fn user_not_found(lang: Lang) -> Self {
         Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))
@@ -254,6 +277,8 @@ mod tests {
             (ApiError::cannot_change_self(Lang::En), 400, ErrorCode::BadRequest),
             (ApiError::user_not_found(Lang::En), 404, ErrorCode::NotFound),
             (ApiError::team_not_found(Lang::En), 404, ErrorCode::NotFound),
+            (ApiError::setup_link_inactive(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::setup_link_invalid(Lang::En), 401, ErrorCode::Unauthorized),
         ] {
             assert_eq!(error.status.as_u16(), status, "{}", error.body.message);
             assert_eq!(error.body.code, code, "{}", error.body.message);

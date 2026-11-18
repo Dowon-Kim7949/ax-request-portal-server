@@ -64,7 +64,7 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         }
     };
 
-    let app = router(AppState { db, sessions: config.sessions }, &config);
+    let app = router(AppState { db, sessions: config.sessions, setup_links: config.setup_links }, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(
         addr = %config.bind,

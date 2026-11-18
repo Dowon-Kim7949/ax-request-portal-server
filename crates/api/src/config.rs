@@ -7,6 +7,7 @@
 //! | `DATABASE_URL`    | unset          | PostgreSQL URL; unset runs without a database (dev, tests) |
 //! | `AX_SESSION_IDLE` | `24h`          | A sign-in ends after this long unused (`s`, `m`, `h`, `d`) |
 //! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
+//! | `AX_SETUP_LINK_TTL` | `72h`        | How long a one-time setup link works                       |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -23,6 +24,19 @@ pub struct Config {
     pub base_path: String,
     pub database_url: Option<String>,
     pub sessions: SessionPolicy,
+    pub setup_links: SetupLinkPolicy,
+}
+
+/// How long a one-time setup link (to set or reset a password) works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SetupLinkPolicy {
+    pub ttl: Duration,
+}
+
+impl Default for SetupLinkPolicy {
+    fn default() -> Self {
+        Self { ttl: Duration::from_secs(72 * HOUR) }
+    }
 }
 
 /// How long a sign-in lasts. Each use moves the end `idle` ahead, but never
@@ -111,7 +125,9 @@ impl Config {
             return Err(ConfigError("AX_SESSION_IDLE must not be longer than AX_SESSION_MAX".to_owned()));
         }
 
-        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions })
+        let setup_links = SetupLinkPolicy { ttl: duration("AX_SETUP_LINK_TTL", SetupLinkPolicy::default().ttl)? };
+
+        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links })
     }
 }
 
@@ -134,6 +150,9 @@ mod tests {
         assert_eq!(c.database_url, None);
         assert_eq!(c.sessions.idle, Duration::from_secs(24 * 3600));
         assert_eq!(c.sessions.max, Duration::from_secs(7 * 24 * 3600));
+        assert_eq!(c.setup_links.ttl, Duration::from_secs(72 * 3600));
+        assert_eq!(config(&[("AX_SETUP_LINK_TTL", "2d")]).unwrap().setup_links.ttl, Duration::from_secs(48 * 3600));
+        assert!(config(&[("AX_SETUP_LINK_TTL", "soon")]).is_err());
     }
 
     #[test]

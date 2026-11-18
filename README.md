@@ -9,7 +9,7 @@ The reference backend for **[AX Request Portal](https://github.com/Dowon-Kim7949
 
 The two repositories meet at one contract. The frontend owns it: `src/api/contract.ts` generates `docs/openapi.json`, the frontend's mock API and its typed client. This server copies that document byte for byte from a pinned frontend commit and implements it. Neither side imports the other's code.
 
-> **Status: sign-in, people and teams.** Sign-in (`login`, `me`, `logout`) and people and teams (`listUsers`, `createUser`, `updateUser`, `listTeams`, `createTeam`, `updateTeam`) work against PostgreSQL. The other 35 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: one-time setup links, so people added in the app set their own password; then the request lifecycle, drafts, and the two AI jobs (feasibility report and AI work up to a merge request).
+> **Status: sign-in, people and teams.** Sign-in (`login`, `me`, `logout`, `completeSetup`), people and teams (`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`) work against PostgreSQL. The other 35 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
 
 ## How the contract stays in step
 
@@ -80,7 +80,10 @@ Passwords are never command-line arguments: the CLI prompts for them, or reads t
   - Nobody creates or changes an operator through the API (`403`).
 - Nothing is deleted. A deactivated person's sessions end at once. A renamed team keeps everything that points at it, because records refer to teams by id.
 - Checks run in the mock API's order: session (`401`), body (`400`, listing every problem in `issues`), permission (`403`), then the operation's rules.
-- People added through the API have no password yet, so they cannot sign in until one is set. Until setup links arrive, set it with `ax-api user set-password`.
+- People added through the API have no password yet. An admin makes a one-time **setup link** for them (`POST /users/{id}/setup-link`, `201 { token, expiresAt }`); the frontend shows it as `/setup#token=…`, and the person sets a password there (`POST /auth/setup`, public), which signs them in.
+  - A link works once and for `AX_SETUP_LINK_TTL` (72 hours). Only the newest link of a person works, so making a new one is how a forgotten password is reset; using it ends the person's other sessions.
+  - Not for operators (`403`, use `ax-api user set-password`) or deactivated people (`400`); deactivating someone deletes their unused link. An unknown, used or expired link is `401`, like a failed sign-in.
+  - The token is stored as its SHA-256 only, like a session's, and rides in the URL fragment, which never reaches a server log.
 
 ## Configuration
 
@@ -93,6 +96,7 @@ With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy
 | `DATABASE_URL` | unset | PostgreSQL URL. Unset runs without a database (`/readyz` says `not_configured`; sign-in answers `500`). |
 | `AX_SESSION_IDLE` | `24h` | A sign-in ends after this long unused (`s`, `m`, `h` or `d`) |
 | `AX_SESSION_MAX` | `7d` | A sign-in ends this long after signing in, however much it is used |
+| `AX_SETUP_LINK_TTL` | `72h` | How long a one-time setup link works |
 | `RUST_LOG` | `info` | Log filter |
 
 Probes: `GET /healthz` (process, version and pinned contract commit) and `GET /readyz` (database reachable) sit at the root whatever `AX_BASE_PATH` is.

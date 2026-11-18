@@ -110,7 +110,7 @@ pub async fn create(
 /// `404` (`userNotFound`); `403` (`operatorProvisioned`) when the person is an
 /// operator or would become one; `400` (`cannotChangeSelf`) when an admin
 /// deactivates themselves or changes their own role; `404` (`teamNotFound`).
-/// Deactivating someone ends their sessions.
+/// Deactivating someone ends their sessions and deletes their unused setup link.
 pub async fn update(
     State(state): State<AppState>,
     lang: Lang,
@@ -162,7 +162,13 @@ pub async fn update(
     .map_err(ApiError::db(lang))?;
     let user = User::from_row(&row).map_err(ApiError::db(lang))?;
     if !user.active {
+        // Out at once, and an unused setup link cannot bring them back in after a reactivation.
         sessions::end_all(db, user.id).await.map_err(ApiError::db(lang))?;
+        sqlx::query("delete from setup_links where user_id = $1")
+            .bind(user.id)
+            .execute(db)
+            .await
+            .map_err(ApiError::db(lang))?;
     }
     Ok(Json(user))
 }

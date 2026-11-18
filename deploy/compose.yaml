@@ -34,6 +34,7 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       AX_SESSION_IDLE: ${AX_SESSION_IDLE:-24h}
       AX_SESSION_MAX: ${AX_SESSION_MAX:-7d}
+      AX_SETUP_LINK_TTL: ${AX_SETUP_LINK_TTL:-72h}
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +47,7 @@ services:
       dockerfile: deploy/web.Dockerfile
       args:
         # Same commit as contract/SOURCE; scripts/sync-contract.sh updates both.
-        FRONTEND_REF: ${FRONTEND_REF:-3052d1bc9973e8860f1df02a3b5daedd537db53d}
+        FRONTEND_REF: ${FRONTEND_REF:-3d2215b705c602c877c024b87c9460fb5d52a192}
     depends_on:
       - ax-backend
     ports:

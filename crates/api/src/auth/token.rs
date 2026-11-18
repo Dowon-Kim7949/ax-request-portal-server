@@ -6,17 +6,25 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
-/// Marks the token as this server's, which also lets secret scanners spot a leaked one.
+/// Marks a session token as this server's, which also lets secret scanners spot a leaked one.
 pub const PREFIX: &str = "axs_";
 
-/// A new token: the prefix and 256 random bits in unpadded base64url.
+/// Marks the token of a one-time setup link.
+pub const LINK_PREFIX: &str = "axl_";
+
+/// A new session token: the prefix and 256 random bits in unpadded base64url.
 pub fn generate() -> String {
-    let mut bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes))
+    generate_with(PREFIX)
 }
 
-/// What the `sessions` table stores for a token.
+/// A new token with `prefix` and 256 random bits in unpadded base64url.
+pub fn generate_with(prefix: &str) -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes))
+}
+
+/// What the database stores for a token (`sessions`, `setup_links`).
 pub fn digest(token: &str) -> [u8; 32] {
     Sha256::digest(token.as_bytes()).into()
 }
