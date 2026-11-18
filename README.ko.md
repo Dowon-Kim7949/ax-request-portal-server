@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인.** `login`, `me`, `logout`이 PostgreSQL과 함께 동작합니다. 나머지 operation 41개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음 순서는 사용자·팀 관리, 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀.** 로그인(`login`, `me`, `logout`)과 사용자·팀(`listUsers`, `createUser`, `updateUser`, `listTeams`, `createTeam`, `updateTeam`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 35개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 일회용 설정 링크입니다. 앱에서 추가된 사람이 링크로 직접 비밀번호를 정합니다. 그다음 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)를 합니다.
 
 ## 계약을 맞추는 방법
 
@@ -69,7 +69,22 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
 
 비밀번호는 명령줄 인자로 받지 않습니다. 프롬프트로 입력하거나, `--password-stdin`으로 표준 입력의 첫 줄을 넘깁니다.
 
+## 사용자와 팀
+
+- 로그인한 사람은 누구나 사용자 목록(비활성 사용자 포함)과 팀 목록을 볼 수 있습니다. 추가와 변경에는 `user:manage`(관리자) 권한이 필요합니다.
+- 규칙은 목 API와 같습니다.
+  - 이메일은 대소문자를 무시하고 중복될 수 없습니다(`400`).
+  - 팀 이름은 대소문자를 무시하고 중복될 수 없으며, 앞뒤 공백을 지운 뒤 1–40자여야 합니다(`400`).
+  - 없는 사용자나 팀은 `404`입니다.
+  - 관리자는 자기 역할을 바꾸거나 자신을 비활성화할 수 없습니다(`400`).
+  - API로는 아무도 운영자를 만들거나 바꿀 수 없습니다(`403`).
+- 삭제는 없습니다. 사용자를 비활성화하면 그 사람의 세션이 바로 끝납니다. 팀은 이름만 바꾸며, 기록이 팀을 id로 가리키므로 이름을 바꿔도 연결이 유지됩니다.
+- 검사 순서도 목 API와 같습니다. 세션(`401`), 본문(`400`, 문제를 `issues`에 모두 나열), 권한(`403`), 그다음 operation 규칙 순입니다.
+- API로 추가한 사람은 아직 비밀번호가 없어서 로그인할 수 없습니다. 설정 링크가 나오기 전까지는 `ax-api user set-password`로 정해 줍니다.
+
 ## 설정
+
+Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설명은 [`deploy/.env.example`](deploy/.env.example)에 있으니 복사해서 쓰면 됩니다. `.env` 파일은 git과 Docker 빌드 컨텍스트 모두에서 제외됩니다.
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -87,9 +102,10 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
 ```
 crates/contract   복사한 계약: operation 목록, 오류 코드, 고정 커밋
 crates/api        HTTP 서버(axum): 라우팅, ApiError, Accept-Language, 상태 확인,
-                  로그인, 역할, ax-api CLI. migrations/에 SQL 스키마가 있습니다
+                  로그인, 역할, 사용자·팀, ax-api CLI.
+                  migrations/에 SQL 스키마가 있습니다
 contract/         openapi.json + SOURCE(고정한 프런트엔드 커밋)
-deploy/           Dockerfile과 compose.yaml(db, ax-backend, web)
+deploy/           Dockerfile, compose.yaml(db, ax-backend, web), .env.example
 scripts/          cargo.sh, sync-contract.sh, smoke.sh
 ```
 

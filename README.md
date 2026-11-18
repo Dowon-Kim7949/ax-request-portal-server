@@ -9,7 +9,7 @@ The reference backend for **[AX Request Portal](https://github.com/Dowon-Kim7949
 
 The two repositories meet at one contract. The frontend owns it: `src/api/contract.ts` generates `docs/openapi.json`, the frontend's mock API and its typed client. This server copies that document byte for byte from a pinned frontend commit and implements it. Neither side imports the other's code.
 
-> **Status: sign-in.** `login`, `me` and `logout` work against PostgreSQL. The other 41 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: people and teams, the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
+> **Status: sign-in, people and teams.** Sign-in (`login`, `me`, `logout`) and people and teams (`listUsers`, `createUser`, `updateUser`, `listTeams`, `createTeam`, `updateTeam`) work against PostgreSQL. The other 35 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: one-time setup links, so people added in the app set their own password; then the request lifecycle, drafts, and the two AI jobs (feasibility report and AI work up to a merge request).
 
 ## How the contract stays in step
 
@@ -69,7 +69,22 @@ The database tests need PostgreSQL: `scripts/cargo.sh test` starts a throwaway o
 
 Passwords are never command-line arguments: the CLI prompts for them, or reads the first line of standard input with `--password-stdin`.
 
+## People and teams
+
+- Anyone signed in can list people, including deactivated ones, and teams. Adding or changing either needs `user:manage` (admins).
+- The rules are the mock API's:
+  - Emails are unique ignoring case (`400`).
+  - Team names are unique ignoring case and 1–40 characters after trimming (`400`).
+  - An unknown person or team is `404`.
+  - Admins cannot change their own role or deactivate themselves (`400`).
+  - Nobody creates or changes an operator through the API (`403`).
+- Nothing is deleted. A deactivated person's sessions end at once. A renamed team keeps everything that points at it, because records refer to teams by id.
+- Checks run in the mock API's order: session (`401`), body (`400`, listing every problem in `issues`), permission (`403`), then the operation's rules.
+- People added through the API have no password yet, so they cannot sign in until one is set. Until setup links arrive, set it with `ax-api user set-password`.
+
 ## Configuration
+
+With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy/.env.example), which explains each one. Git ignores `.env` files, and so does the Docker build context.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -87,9 +102,10 @@ Probes: `GET /healthz` (process, version and pinned contract commit) and `GET /r
 ```
 crates/contract   the vendored contract: operations, error codes, pinned commit
 crates/api        the HTTP server (axum): routing, ApiError, Accept-Language, probes,
-                  sign-in, roles, the ax-api CLI; migrations/ holds the SQL schema
+                  sign-in, roles, people and teams, the ax-api CLI;
+                  migrations/ holds the SQL schema
 contract/         openapi.json + SOURCE (pinned frontend commit)
-deploy/           Dockerfiles and compose.yaml (db, ax-backend, web)
+deploy/           Dockerfiles, compose.yaml (db, ax-backend, web) and .env.example
 scripts/          cargo.sh, sync-contract.sh, smoke.sh
 ```
 
