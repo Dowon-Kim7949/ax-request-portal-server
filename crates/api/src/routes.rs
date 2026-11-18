@@ -20,6 +20,7 @@ use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
+use crate::{teams, users};
 
 /// The whole application.
 ///
@@ -75,6 +76,12 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "login" => |methods, filter| methods.on(filter, auth::handlers::login),
         "logout" => |methods, filter| methods.on(filter, auth::handlers::logout),
         "me" => |methods, filter| methods.on(filter, auth::handlers::me),
+        "listUsers" => |methods, filter| methods.on(filter, users::handlers::list),
+        "createUser" => |methods, filter| methods.on(filter, users::handlers::create),
+        "updateUser" => |methods, filter| methods.on(filter, users::handlers::update),
+        "listTeams" => |methods, filter| methods.on(filter, teams::handlers::list),
+        "createTeam" => |methods, filter| methods.on(filter, teams::handlers::create),
+        "updateTeam" => |methods, filter| methods.on(filter, teams::handlers::update),
         _ => return None,
     })
 }

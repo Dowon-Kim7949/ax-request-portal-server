@@ -7,6 +7,7 @@
 
 pub mod accounts;
 pub mod auth;
+pub mod body;
 pub mod cli;
 pub mod config;
 pub mod db;
@@ -16,6 +17,7 @@ pub mod lang;
 pub mod roles;
 pub mod routes;
 pub mod state;
+pub mod teams;
 pub mod users;
 pub mod validate;
 

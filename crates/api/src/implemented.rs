@@ -7,11 +7,19 @@
 //! entry is in the contract.
 
 /// `operationId`s with a real handler, in contract order.
-pub const IMPLEMENTED: &[&str] = &["login", "logout", "me"];
+pub const IMPLEMENTED: &[&str] =
+    &["login", "logout", "me", "listUsers", "createUser", "updateUser", "listTeams", "createTeam", "updateTeam"];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listed_in_contract_order() {
+        let order: Vec<&str> =
+            ax_contract::operations().iter().map(|op| op.id.as_str()).filter(|id| IMPLEMENTED.contains(id)).collect();
+        assert_eq!(order, IMPLEMENTED);
+    }
 
     #[test]
     fn every_implemented_operation_is_in_the_contract() {

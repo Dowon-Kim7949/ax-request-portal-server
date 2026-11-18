@@ -1,4 +1,6 @@
-//! People, as the contract's `User` shows them.
+//! People, as the contract's `User` shows them, and `listUsers`, `createUser`, `updateUser`.
+
+pub mod handlers;
 
 use serde::Serialize;
 use sqlx::Row;
@@ -23,6 +25,20 @@ pub struct User {
 }
 
 impl User {
+    /// The account with this id, or `None` (also for an id that is not a UUID).
+    ///
+    /// # Errors
+    ///
+    /// Database failures.
+    pub async fn find(db: &sqlx::PgPool, id: &str) -> Result<Option<Self>, sqlx::Error> {
+        let Ok(id) = Uuid::parse_str(id) else { return Ok(None) };
+        let row = sqlx::query("select id, name, email, role, team_id, active from users where id = $1")
+            .bind(id)
+            .fetch_optional(db)
+            .await?;
+        row.as_ref().map(Self::from_row).transpose()
+    }
+
     /// Reads the `id, name, email, role, team_id, active` columns of a row.
     ///
     /// # Errors

@@ -5,11 +5,11 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::Serialize;
-use serde_json::Value;
 use sqlx::Row;
 
 use super::{CurrentUser, password, sessions};
-use crate::error::{ApiError, Issue};
+use crate::body::{Body, Text};
+use crate::error::ApiError;
 use crate::lang::Lang;
 use crate::state::AppState;
 use crate::users::User;
@@ -78,28 +78,17 @@ pub async fn logout(State(state): State<AppState>, lang: Lang, current: CurrentU
 
 /// Checks the body against the contract's `LoginBody`. The email is compared
 /// as typed (no trimming), like the frontend's validation.
-fn login_body(body: &[u8], lang: Lang) -> Result<(String, String), ApiError> {
-    let Ok(value) = serde_json::from_slice::<Value>(body) else {
-        let message = lang.pick("JSON 객체를 보내 주세요.", "Send a JSON object.");
-        return Err(ApiError::check_input(lang, vec![Issue { path: String::new(), message: message.to_owned() }]));
+fn login_body(bytes: &[u8], lang: Lang) -> Result<(String, String), ApiError> {
+    const EMAIL: Text = ("올바른 이메일 주소를 입력해 주세요.", "Enter a valid email address.");
+    const PASSWORD: Text = ("비밀번호를 입력해 주세요.", "Enter your password.");
+    let mut body = Body::parse(bytes, lang)?;
+    let email = body.required("email", EMAIL, |v| v.as_str().filter(|e| is_email(e)).map(str::to_owned));
+    let password = body.required("password", PASSWORD, |v| v.as_str().filter(|p| !p.is_empty()).map(str::to_owned));
+    body.finish()?;
+    let (Some(email), Some(password)) = (email, password) else {
+        unreachable!("finish() fails when a required field is missing")
     };
-    let email = value.get("email").and_then(Value::as_str).filter(|email| is_email(email));
-    let password = value.get("password").and_then(Value::as_str).filter(|password| !password.is_empty());
-    match (email, password) {
-        (Some(email), Some(password)) => Ok((email.to_owned(), password.to_owned())),
-        (email, password) => {
-            let mut issues = Vec::new();
-            if email.is_none() {
-                let message = lang.pick("올바른 이메일 주소를 입력해 주세요.", "Enter a valid email address.");
-                issues.push(Issue { path: "email".to_owned(), message: message.to_owned() });
-            }
-            if password.is_none() {
-                let message = lang.pick("비밀번호를 입력해 주세요.", "Enter your password.");
-                issues.push(Issue { path: "password".to_owned(), message: message.to_owned() });
-            }
-            Err(ApiError::check_input(lang, issues))
-        }
-    }
+    Ok((email, password))
 }
 
 #[cfg(test)]
@@ -120,7 +109,7 @@ mod tests {
         assert_eq!(issue_paths(r#"{"email":"ada@example.com","password":""}"#), ["password"]);
         assert_eq!(issue_paths(r#"{"email":" ada@example.com","password":"x"}"#), ["email"]);
         assert_eq!(issue_paths(r#"{"email":1,"password":2}"#), ["email", "password"]);
-        assert_eq!(issue_paths("[]"), ["email", "password"]);
+        assert_eq!(issue_paths("[]"), [""]);
         assert_eq!(issue_paths(""), [""]);
         assert_eq!(issue_paths("{"), [""]);
     }
