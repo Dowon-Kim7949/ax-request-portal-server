@@ -11,7 +11,6 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 use ax_api::accounts::{self, NewAccount};
-use ax_api::config::SessionPolicy;
 use ax_api::roles::Role;
 use ax_api::users::User;
 use ax_api::{AppState, Config, router};
@@ -20,7 +19,7 @@ pub const PASSWORD: &str = "correct horse battery staple";
 
 pub fn app(pool: &PgPool) -> Router {
     let config = Config::from_lookup(|_| None).unwrap();
-    router(AppState { db: Some(pool.clone()), sessions: SessionPolicy::default() }, &config)
+    router(AppState { db: Some(pool.clone()), ..AppState::default() }, &config)
 }
 
 pub async fn send(

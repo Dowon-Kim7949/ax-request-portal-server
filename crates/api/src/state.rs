@@ -2,7 +2,7 @@
 
 use sqlx::PgPool;
 
-use crate::config::SessionPolicy;
+use crate::config::{SessionPolicy, SetupLinkPolicy};
 use crate::error::ApiError;
 use crate::lang::Lang;
 
@@ -11,6 +11,7 @@ pub struct AppState {
     /// `None` when `DATABASE_URL` is unset (local runs and tests).
     pub db: Option<PgPool>,
     pub sessions: SessionPolicy,
+    pub setup_links: SetupLinkPolicy,
 }
 
 impl AppState {

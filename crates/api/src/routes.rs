@@ -76,6 +76,8 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "login" => |methods, filter| methods.on(filter, auth::handlers::login),
         "logout" => |methods, filter| methods.on(filter, auth::handlers::logout),
         "me" => |methods, filter| methods.on(filter, auth::handlers::me),
+        "completeSetup" => |methods, filter| methods.on(filter, auth::setup::complete),
+        "createSetupLink" => |methods, filter| methods.on(filter, auth::setup::create),
         "listUsers" => |methods, filter| methods.on(filter, users::handlers::list),
         "createUser" => |methods, filter| methods.on(filter, users::handlers::create),
         "updateUser" => |methods, filter| methods.on(filter, users::handlers::update),

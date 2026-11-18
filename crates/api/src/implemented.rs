@@ -7,8 +7,19 @@
 //! entry is in the contract.
 
 /// `operationId`s with a real handler, in contract order.
-pub const IMPLEMENTED: &[&str] =
-    &["login", "logout", "me", "listUsers", "createUser", "updateUser", "listTeams", "createTeam", "updateTeam"];
+pub const IMPLEMENTED: &[&str] = &[
+    "login",
+    "logout",
+    "me",
+    "completeSetup",
+    "listUsers",
+    "createUser",
+    "updateUser",
+    "createSetupLink",
+    "listTeams",
+    "createTeam",
+    "updateTeam",
+];
 
 #[cfg(test)]
 mod tests {
