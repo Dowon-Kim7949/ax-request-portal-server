@@ -191,9 +191,10 @@ async fn a_refusal_or_a_rejected_call_is_not_retried(pool: PgPool) {
     assert_eq!(error.as_deref(), Some("Claude declined to write the report (cyber)"));
     let booked: i64 = sqlx::query_scalar("select count(*) from ai_usage").fetch_one(&pool).await.unwrap();
     assert_eq!(booked, 1, "the declined call is still booked");
-    assert_eq!(request(&pool).await["status"], "reporting", "the request waits for a person");
+    assert_eq!(request(&pool).await["status"], "review", "the request goes on to the developer");
 
     // A rate limit is retried later; a rejected key is not.
+    sqlx::query("update requests set status = 'reporting' where id = 1").execute(&pool).await.unwrap();
     sqlx::query("update ai_jobs set status = 'queued', attempts = 0, run_after = now()").execute(&pool).await.unwrap();
     let limited = json!({ "type": "error", "error": { "type": "rate_limit_error", "message": "Slow down" } });
     let rejected =

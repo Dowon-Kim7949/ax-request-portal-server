@@ -161,29 +161,34 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
     // Every call is booked, whatever became of it, against the person whose
     // step started the job.
     let cost_krw = book(db, &job, &request, &context.selection, &spend).await?;
-    let done = match outcome {
-        Ok(done) => done,
+    let (done, gave_up) = match outcome {
+        Ok(done) => (done, false),
         Err(failure) => {
             let error = failure.message;
             tracing::warn!(job = job.id, request = job.request, %error, retry = failure.retry, "AI job failed");
-            let (status, retry) = if failure.retry && job.attempts < MAX_ATTEMPTS {
-                ("queued", job.attempts * 30)
-            } else {
-                ("failed", 0)
-            };
-            sqlx::query(
-                "update ai_jobs
-                    set status = $2, error = $3, run_after = now() + make_interval(secs => $4),
-                        finished_at = case when $2 = 'failed' then now() end
-                  where id = $1",
-            )
-            .bind(job.id)
-            .bind(status)
-            .bind(error)
-            .bind(f64::from(retry))
-            .execute(db)
-            .await?;
-            return Ok(true);
+            if failure.retry && job.attempts < MAX_ATTEMPTS {
+                sqlx::query(
+                    "update ai_jobs set status = 'queued', error = $2,
+                            run_after = now() + make_interval(secs => $3)
+                      where id = $1",
+                )
+                .bind(job.id)
+                .bind(error)
+                .bind(f64::from(job.attempts * 30))
+                .execute(db)
+                .await?;
+                return Ok(true);
+            }
+            sqlx::query("update ai_jobs set status = 'failed', error = $2, finished_at = now() where id = $1")
+                .bind(job.id)
+                .bind(error)
+                .execute(db)
+                .await?;
+            // Given up: the AI's turn ends with a result saying so, and the
+            // request goes on to the developer, who decides by hand. Without
+            // this it would wait in `reporting` or `in_progress` for good:
+            // only the AI's own event leads out of them.
+            (given_up(job.task, &request, job.lang), true)
         }
     };
 
@@ -191,7 +196,9 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
     let Some(mut request) =
         StoredRequest::find_for_update(&mut tx, job.request).await?.filter(|r| r.status == expected)
     else {
-        finish(&mut *tx, job.id).await?;
+        if !gave_up {
+            finish(&mut *tx, job.id).await?;
+        }
         tx.commit().await?;
         return Ok(true);
     };
@@ -206,9 +213,29 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
     request.save(&mut tx).await?;
     let owners = store::owners_of(&mut *tx, request.project_id).await?;
     notifications::notify_status(&mut tx, &request, &owners, event.as_str(), None).await?;
-    finish(&mut *tx, job.id).await?;
+    if !gave_up {
+        finish(&mut *tx, job.id).await?;
+    }
     tx.commit().await?;
     Ok(true)
+}
+
+/// What the AI hands over when its job gives up, in the job's language.
+fn given_up(task: Task, request: &StoredRequest, lang: Lang) -> Done {
+    match task {
+        Task::Report => Done::Report(super::hand_over_report(
+            request,
+            lang,
+            lang.pick(
+                "AI가 보고서를 쓰지 못했습니다. 담당 개발자가 직접 검토해 주세요.",
+                "The AI could not write the report. The responsible developer reviews the request by hand.",
+            ),
+        )),
+        Task::Work => Done::Work(super::hand_over_work(lang.pick(
+            "AI 작업이 실패해 코드를 바꾸지 않았습니다. 다시 실행하거나 직접 작업해 주세요.",
+            "The AI work run failed and changed no code. Run it again, or do the work by hand.",
+        ))),
+    }
 }
 
 /// Books each spend at today's prices; returns the won booked. A model
