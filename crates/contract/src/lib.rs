@@ -12,6 +12,11 @@ use serde_json::Value;
 /// The vendored OpenAPI document, byte for byte.
 pub const OPENAPI_JSON: &str = include_str!("../../../contract/openapi.json");
 
+/// The request lifecycle as data (the frontend's `docs/lifecycle.json`):
+/// statuses, transitions, who sends each event, guards by event, turns and
+/// stages. The server's port is tested against it.
+pub const LIFECYCLE_JSON: &str = include_str!("../../../contract/lifecycle.json");
+
 /// Where the vendored document came from (`repo=` and `commit=` lines).
 pub const SOURCE: &str = include_str!("../../../contract/SOURCE");
 
@@ -35,6 +40,16 @@ pub struct Operation {
 pub fn document() -> &'static Value {
     static DOC: OnceLock<Value> = OnceLock::new();
     DOC.get_or_init(|| serde_json::from_str(OPENAPI_JSON).expect("contract/openapi.json is valid JSON"))
+}
+
+/// The parsed lifecycle document.
+///
+/// # Panics
+///
+/// Panics if the vendored file is not valid JSON; a unit test guards this.
+pub fn lifecycle() -> &'static Value {
+    static DOC: OnceLock<Value> = OnceLock::new();
+    DOC.get_or_init(|| serde_json::from_str(LIFECYCLE_JSON).expect("contract/lifecycle.json is valid JSON"))
 }
 
 /// Every operation in the contract, in document order.
@@ -142,6 +157,12 @@ mod tests {
         assert!(operation("no-such-operation").is_none());
         assert!(schema_enum("Role").contains(&"operator"));
         assert!(property_pattern("LoginBody", "email").is_some_and(|p| p.starts_with('^')));
+    }
+
+    #[test]
+    fn the_lifecycle_document_parses() {
+        assert!(lifecycle()["transitions"].is_object());
+        assert!(lifecycle()["statuses"].as_array().is_some_and(|s| s.len() > 1));
     }
 
     #[test]

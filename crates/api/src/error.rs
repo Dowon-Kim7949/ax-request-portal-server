@@ -184,6 +184,23 @@ impl ApiError {
         )
     }
 
+    /// `400`: a project owner who is not a developer or an admin (the mock's `ownersMustBeDevelopers`).
+    pub fn owners_must_be_developers(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::BadRequest,
+            lang.pick("담당자는 개발자 또는 관리자여야 합니다.", "Owners must be developers or admins."),
+        )
+    }
+
+    /// `404` on a project's own address, `400` where a request names one (the mock's `projectNotFound`).
+    pub fn project_not_found(lang: Lang, status: StatusCode) -> Self {
+        let code = if status == StatusCode::NOT_FOUND { ErrorCode::NotFound } else { ErrorCode::BadRequest };
+        Self {
+            status,
+            ..Self::new(code, lang.pick("선택한 프로젝트를 찾을 수 없습니다.", "The selected project was not found."))
+        }
+    }
+
     /// `404` (the mock's `userNotFound`).
     pub fn user_not_found(lang: Lang) -> Self {
         Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))
@@ -278,6 +295,9 @@ mod tests {
             (ApiError::user_not_found(Lang::En), 404, ErrorCode::NotFound),
             (ApiError::team_not_found(Lang::En), 404, ErrorCode::NotFound),
             (ApiError::setup_link_inactive(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::owners_must_be_developers(Lang::En), 400, ErrorCode::BadRequest),
+            (ApiError::project_not_found(Lang::En, StatusCode::NOT_FOUND), 404, ErrorCode::NotFound),
+            (ApiError::project_not_found(Lang::En, StatusCode::BAD_REQUEST), 400, ErrorCode::BadRequest),
             (ApiError::setup_link_invalid(Lang::En), 401, ErrorCode::Unauthorized),
         ] {
             assert_eq!(error.status.as_u16(), status, "{}", error.body.message);

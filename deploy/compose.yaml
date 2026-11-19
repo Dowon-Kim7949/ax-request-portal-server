@@ -47,7 +47,7 @@ services:
       dockerfile: deploy/web.Dockerfile
       args:
         # Same commit as contract/SOURCE; scripts/sync-contract.sh updates both.
-        FRONTEND_REF: ${FRONTEND_REF:-3d2215b705c602c877c024b87c9460fb5d52a192}
+        FRONTEND_REF: ${FRONTEND_REF:-79e781a5a0cf77d6f558b29c171a11bc61674419}
     depends_on:
       - ax-backend
     ports:
