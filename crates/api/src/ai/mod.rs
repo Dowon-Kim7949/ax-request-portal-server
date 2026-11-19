@@ -107,6 +107,46 @@ pub trait Provider: Send + Sync + 'static {
     fn work(&self, request: &StoredRequest, job: &Job) -> impl Future<Output = Reply<WorkResult>> + Send;
 }
 
+/// A report that assesses nothing and leaves the request to the developer:
+/// `undetermined`, every criterion to be checked by hand, `summary` saying
+/// why. The stub writes it, and so does the queue when a report job gives up.
+pub fn hand_over_report(request: &StoredRequest, lang: Lang, summary: &str) -> ReportResult {
+    let method = lang.pick("사람이 직접 확인", "Checked by hand");
+    let verification: Vec<Value> = field(&request.details, "acceptanceCriteria")
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| json!({ "criterionId": c["id"], "automatable": false, "method": method }))
+        .collect();
+    ReportResult {
+        report: json!({
+            "verdict": "undetermined",
+            "summary": summary,
+            "evidence": { "wikiDocs": [], "codeFiles": [] },
+            "impact": { "changedScreens": [], "recheck": [] },
+            "plan": [],
+            "verification": verification,
+            "openQuestions": [],
+            "assumptions": [],
+            "constraintChecks": [],
+            "wikiTrust": "low",
+            "size": "M",
+            "risks": [],
+        }),
+        scope: None,
+    }
+}
+
+/// A finished work run that changed nothing (`outcome: error`), with `summary`.
+pub fn hand_over_work(summary: &str) -> WorkResult {
+    WorkResult {
+        outcome: "error".to_owned(),
+        summary: summary.to_owned(),
+        extra: serde_json::Map::new(),
+        regression: Vec::new(),
+    }
+}
+
 /// The provider until a real one is wired: it says so, in the request's
 /// language, assesses nothing and changes no code. The lifecycle stays usable
 /// end to end; the developer decides by hand.
@@ -115,49 +155,17 @@ pub struct StubProvider;
 
 impl Provider for StubProvider {
     async fn report(&self, request: &StoredRequest, job: &Job) -> Reply<ReportResult> {
-        let lang = job.lang;
-        let method = lang.pick("사람이 직접 확인", "Checked by hand");
-        let verification: Vec<Value> = field(&request.details, "acceptanceCriteria")
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|c| json!({ "criterionId": c["id"], "automatable": false, "method": method }))
-            .collect();
-        let summary = lang.pick(
+        let summary = job.lang.pick(
             "AI 제공자가 연결되지 않아 구현 가능성을 판단하지 않았습니다. 담당 개발자가 직접 검토해 주세요.",
             "No AI provider is connected, so feasibility was not assessed. The responsible developer reviews the request by hand.",
         );
-        Reply::ok(ReportResult {
-            report: json!({
-                "verdict": "undetermined",
-                "summary": summary,
-                "evidence": { "wikiDocs": [], "codeFiles": [] },
-                "impact": { "changedScreens": [], "recheck": [] },
-                "plan": [],
-                "verification": verification,
-                "openQuestions": [],
-                "assumptions": [],
-                "constraintChecks": [],
-                "wikiTrust": "low",
-                "size": "M",
-                "risks": [],
-            }),
-            scope: None,
-        })
+        Reply::ok(hand_over_report(request, job.lang, summary))
     }
 
     async fn work(&self, _request: &StoredRequest, job: &Job) -> Reply<WorkResult> {
-        let lang = job.lang;
-        Reply::ok(WorkResult {
-            outcome: "error".to_owned(),
-            summary: lang
-                .pick(
-                    "AI 제공자가 연결되지 않아 코드를 바꾸지 않았습니다. 직접 작업하거나, 제공자를 연결한 뒤 다시 실행해 주세요.",
-                    "No AI provider is connected, so no code was changed. Do the work by hand, or connect a provider and run it again.",
-                )
-                .to_owned(),
-            extra: serde_json::Map::new(),
-            regression: Vec::new(),
-        })
+        Reply::ok(hand_over_work(job.lang.pick(
+            "AI 제공자가 연결되지 않아 코드를 바꾸지 않았습니다. 직접 작업하거나, 제공자를 연결한 뒤 다시 실행해 주세요.",
+            "No AI provider is connected, so no code was changed. Do the work by hand, or connect a provider and run it again.",
+        )))
     }
 }

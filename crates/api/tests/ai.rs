@@ -224,8 +224,34 @@ async fn a_failing_job_is_retried_then_given_up(pool: PgPool) {
     }
     let error: Option<String> = sqlx::query_scalar("select error from ai_jobs").fetch_one(&pool).await.unwrap();
     assert_eq!(error.as_deref(), Some("the model is down"));
-    // The request waits for a person; nothing else runs.
-    assert_eq!(get(&pool, &w.requester).await["status"], "reporting");
+    // Given up, the AI hands the request to the developer instead of leaving
+    // it in `reporting`, where nothing else could move it; nothing else runs.
+    let request = get(&pool, &w.dev).await;
+    assert_eq!(request["status"], "review");
+    assert_eq!(request["report"]["verdict"], "undetermined");
+    assert_eq!(
+        request["report"]["summary"],
+        "The AI could not write the report. The responsible developer reviews the request by hand."
+    );
+    assert_eq!(request["timeline"].as_array().unwrap().last().unwrap()["event"], "reportReady");
+    let (_, status, _) = jobs(&pool).await.remove(0);
+    assert_eq!(status, "failed", "the job keeps its failure for the operator");
     sqlx::query("update ai_jobs set run_after = now()").execute(&pool).await.unwrap();
     assert_eq!(run_pending(&pool, &Broken, &settings()).await.unwrap(), 0);
+
+    // A work run that gives up goes on to code review, changing nothing.
+    let (status, _) =
+        send(&pool, "POST", "/requests/1/transitions", Some(&w.dev), "en", Some(json!({ "event": "runWork" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    for _ in 1..=MAX_ATTEMPTS {
+        sqlx::query("update ai_jobs set run_after = now()").execute(&pool).await.unwrap();
+        run_pending(&pool, &Broken, &settings()).await.unwrap();
+    }
+    let request = get(&pool, &w.dev).await;
+    assert_eq!(request["status"], "code_review");
+    assert_eq!((&request["work"]["phase"], &request["work"]["outcome"]), (&json!("finished"), &json!("error")));
+    assert_eq!(
+        request["work"]["summary"],
+        "The AI work run failed and changed no code. Run it again, or do the work by hand."
+    );
 }
