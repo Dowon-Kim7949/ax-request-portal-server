@@ -261,7 +261,7 @@ async fn the_precheck_adds_claudes_advice_to_the_rules(pool: PgPool) {
         "attachmentIds": [],
     });
     let (status, rules) = send(&pool, "POST", "/requests/precheck", Some(&token), "en", Some(draft.clone())).await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!((status, &rules["aiAdvice"]), (StatusCode::OK, &json!("notConnected")), "without Claude");
     let rules = rules["issues"].as_array().unwrap().clone();
     assert!(rules.iter().any(|i| i["field"] == "desiredBehavior"), "the rules flag the vague word: {rules:?}");
 
@@ -288,6 +288,7 @@ async fn the_precheck_adds_claudes_advice_to_the_rules(pool: PgPool) {
         json!({ "field": "currentBehavior", "severity": "warning", "message": "Say where you looked for the notice" }),
     );
     assert_eq!(checked["issues"], Value::Array(expected), "rules first; Claude only where they said nothing");
+    assert_eq!(checked["aiAdvice"], "included");
 
     let (headers, body) = seen.lock().unwrap()[0].clone();
     assert_eq!(headers["x-api-key"], "sk-precheck-key-5678");
@@ -304,4 +305,5 @@ async fn the_precheck_adds_claudes_advice_to_the_rules(pool: PgPool) {
     let (status, checked) =
         send_to(with_claude(&pool, claude), "POST", "/requests/precheck", Some(&token), "en", Some(draft)).await;
     assert_eq!((status, checked["issues"].clone()), (StatusCode::OK, Value::Array(rules)));
+    assert_eq!(checked["aiAdvice"], "failed");
 }
