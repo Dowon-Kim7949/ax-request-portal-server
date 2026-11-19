@@ -95,6 +95,7 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         db,
         sessions: config.sessions,
         setup_links: config.setup_links,
+        login: config.login,
         time_zone: config.time_zone.clone(),
         ai: config.ai.clone(),
         drafts: config.drafts,

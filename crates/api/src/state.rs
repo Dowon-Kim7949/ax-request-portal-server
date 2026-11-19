@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use crate::ai::claude::ClaudeProvider;
 use crate::attachments::Files;
 
-use crate::config::{AiSettings, BusinessTimeZone, DraftPolicy, SessionPolicy, SetupLinkPolicy};
+use crate::config::{AiSettings, BusinessTimeZone, DraftPolicy, LoginPolicy, SessionPolicy, SetupLinkPolicy};
 use crate::error::ApiError;
 use crate::lang::Lang;
 
@@ -15,6 +15,7 @@ pub struct AppState {
     pub db: Option<PgPool>,
     pub sessions: SessionPolicy,
     pub setup_links: SetupLinkPolicy,
+    pub login: LoginPolicy,
     pub time_zone: BusinessTimeZone,
     pub ai: AiSettings,
     pub drafts: DraftPolicy,

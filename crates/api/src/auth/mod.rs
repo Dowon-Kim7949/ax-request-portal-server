@@ -10,6 +10,7 @@ pub mod handlers;
 pub mod password;
 pub mod sessions;
 pub mod setup;
+pub mod throttle;
 pub mod token;
 
 use axum::extract::FromRequestParts;

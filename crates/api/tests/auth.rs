@@ -259,3 +259,54 @@ async fn the_schema_enforces_its_rules(pool: PgPool) {
     // Migrating an up-to-date database is a no-op.
     db::migrate(&pool).await.unwrap();
 }
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn password_guessing_is_locked_out(pool: PgPool) {
+    account(&pool, "ada@example.com", Role::Developer).await;
+    let wrong =
+        (StatusCode::UNAUTHORIZED, json!({ "code": "unauthorized", "message": "The email or password is incorrect." }));
+    let locked = (
+        StatusCode::UNAUTHORIZED,
+        json!({ "code": "unauthorized", "message": "Too many sign-in attempts. Try again in 15 minutes." }),
+    );
+
+    // A success clears the count: two misses, a sign-in, then five more misses are allowed.
+    for _ in 0..2 {
+        assert_eq!(login(&pool, "ada@example.com", "guess", "en").await, wrong);
+    }
+    assert_eq!(login(&pool, "ADA@example.com", PASSWORD, "en").await.0, StatusCode::OK);
+    for _ in 0..5 {
+        assert_eq!(login(&pool, "ada@example.com", "guess", "en").await, wrong);
+    }
+    // The sixth attempt is refused, even with the right password, in any case of the email.
+    assert_eq!(login(&pool, "Ada@Example.com", PASSWORD, "en").await, locked);
+    let (_, body) = login(&pool, "ada@example.com", PASSWORD, "ko").await;
+    assert_eq!(body["message"], "로그인 시도가 너무 많습니다. 15분 뒤에 다시 시도해 주세요.");
+
+    // An unknown email is counted and refused the same way.
+    for _ in 0..5 {
+        assert_eq!(login(&pool, "nobody@example.com", PASSWORD, "en").await, wrong);
+    }
+    assert_eq!(login(&pool, "nobody@example.com", PASSWORD, "en").await, locked);
+
+    // Once the lockout has passed, the right password signs in again.
+    sqlx::query("update login_attempts set locked_until = now() - interval '1 second'").execute(&pool).await.unwrap();
+    assert_eq!(login(&pool, "ada@example.com", PASSWORD, "en").await.0, StatusCode::OK);
+    let left: i64 = sqlx::query_scalar("select count(*) from login_attempts").fetch_one(&pool).await.unwrap();
+    assert_eq!(left, 0, "signing in cleared the email's row and the sweep the unknown one's");
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_lock_outlasts_the_window_it_started_in(pool: PgPool) {
+    account(&pool, "ada@example.com", Role::Developer).await;
+    for _ in 0..6 {
+        login(&pool, "ada@example.com", "guess", "en").await;
+    }
+    // The first miss is now older than the window, but the lock still holds.
+    sqlx::query("update login_attempts set first_at = now() - interval '20 minutes'").execute(&pool).await.unwrap();
+    let (status, body) = login(&pool, "ada@example.com", PASSWORD, "en").await;
+    assert_eq!(
+        (status, body["message"].as_str().map(|m| m.starts_with("Too many"))),
+        (StatusCode::UNAUTHORIZED, Some(true))
+    );
+}

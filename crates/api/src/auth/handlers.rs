@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use serde::Serialize;
 use sqlx::Row;
 
-use super::{CurrentUser, password, sessions};
+use super::{CurrentUser, password, sessions, throttle};
 use crate::body::{Body, Text};
 use crate::error::ApiError;
 use crate::lang::Lang;
@@ -27,11 +27,20 @@ pub struct Session {
 /// `400` (`checkInput`) when the body does not match `LoginBody`. Any other
 /// failure (no such account, a deactivated one, no password set, a wrong
 /// password) is the same `401` (`wrongCredentials`), so the answer does not
-/// tell which emails exist. The contract lists only `200` and `400` here; the
-/// `401` follows the frontend's mock API, which the client is built against.
+/// tell which emails exist.
+///
+/// Each attempt is counted first (`auth::throttle`): past `AX_LOGIN_ATTEMPTS`
+/// within `AX_LOGIN_LOCKOUT` the answer is a `401` saying when to try again,
+/// whatever the password, and for unknown emails alike. Signing in clears the
+/// count.
 pub async fn login(State(state): State<AppState>, lang: Lang, body: Bytes) -> Result<Json<Session>, ApiError> {
     let (email, password) = login_body(&body, lang)?;
     let db = state.db(lang)?;
+    if let Some(seconds) =
+        throttle::attempt(db, &state.login, &email).await.map_err(|error| ApiError::database(lang, &error))?
+    {
+        return Err(ApiError::sign_in_locked(lang, seconds));
+    }
 
     let row = sqlx::query(
         "select u.id, u.name, u.email, u.role, u.team_id, u.active, u.password_hash
@@ -58,6 +67,7 @@ pub async fn login(State(state): State<AppState>, lang: Lang, body: Bytes) -> Re
         return Err(ApiError::wrong_credentials(lang));
     };
 
+    throttle::clear(db, &email).await.map_err(|error| ApiError::database(lang, &error))?;
     let token =
         sessions::start(db, &state.sessions, user.id).await.map_err(|error| ApiError::database(lang, &error))?;
     Ok(Json(Session { token, user }))
