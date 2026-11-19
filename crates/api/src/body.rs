@@ -100,6 +100,24 @@ impl Body {
     }
 }
 
+/// The largest integer JavaScript numbers hold exactly (`Number.MAX_SAFE_INTEGER`).
+pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+
+/// A JSON number that is a whole number JavaScript holds exactly (zod's
+/// `z.int()`): `2` and `2.0` are, `2.5` and `1e300` are not.
+pub fn integer(value: &Value) -> Option<i64> {
+    let n = match value.as_i64() {
+        Some(n) => n,
+        None => {
+            let f = value.as_f64()?;
+            #[allow(clippy::cast_possible_truncation)] // checked to be whole and in range first
+            let n = (f.fract() == 0.0 && f.abs() <= 9_007_199_254_740_991.0).then_some(f as i64)?;
+            n
+        }
+    };
+    (n.abs() <= MAX_SAFE_INTEGER).then_some(n)
+}
+
 /// The length of a string as JavaScript (and zod) counts it.
 pub fn utf16_len(text: &str) -> usize {
     text.encode_utf16().count()
@@ -155,6 +173,17 @@ mod tests {
         assert_eq!(body.patch("set", MSG, text), Patch::Set("t".to_owned()));
         assert_eq!(body.patch("bad", MSG, text), Patch::Keep);
         assert_eq!(paths(body.finish().unwrap_err()), ["bad"]);
+    }
+
+    #[test]
+    fn integers_are_whole_safe_numbers() {
+        assert_eq!(integer(&json!(2)), Some(2));
+        assert_eq!(integer(&json!(2.0)), Some(2));
+        assert_eq!(integer(&json!(-3)), Some(-3));
+        assert_eq!(integer(&json!(MAX_SAFE_INTEGER)), Some(MAX_SAFE_INTEGER));
+        for bad in [json!(2.5), json!(1e300), json!(MAX_SAFE_INTEGER + 1), json!("2"), json!(null)] {
+            assert_eq!(integer(&bad), None, "{bad}");
+        }
     }
 
     #[test]

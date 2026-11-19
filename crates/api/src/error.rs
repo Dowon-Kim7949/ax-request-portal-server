@@ -245,6 +245,37 @@ impl ApiError {
         Self::new(ErrorCode::BadRequest, message).with_issues(issues)
     }
 
+    /// `404`: no such saved draft, or someone else's (the mock's `draftNotFound`).
+    pub fn draft_not_found(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::NotFound,
+            lang.pick(
+                "임시 저장된 초안을 찾을 수 없습니다. 다른 기기에서 지웠거나 제출했을 수 있습니다.",
+                "The saved draft was not found. It may have been deleted or submitted on another device.",
+            ),
+        )
+    }
+
+    /// `409 limit_reached`: the account holds as many drafts as allowed (the mock's `draftLimit`).
+    pub fn draft_limit(lang: Lang, limit: u32) -> Self {
+        let message = match lang {
+            Lang::Ko => format!("임시 저장함이 가득 찼습니다(최대 {limit}개). 다른 초안을 지우면 저장할 수 있습니다."),
+            Lang::En => format!("Your saved drafts are full (up to {limit}). Delete one to save another."),
+        };
+        Self::new(ErrorCode::LimitReached, message)
+    }
+
+    /// `409 conflict`: the draft was saved since the client read it (the mock's `draftConflict`).
+    pub fn draft_conflict(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Conflict,
+            lang.pick(
+                "이 초안이 다른 곳에서 먼저 저장되었습니다. 저장된 내용을 불러오거나 이 화면 내용으로 다시 저장해 주세요.",
+                "This draft was saved somewhere else in the meantime. Load the saved version, or save what is on this screen over it.",
+            ),
+        )
+    }
+
     /// `404` (the mock's `userNotFound`).
     pub fn user_not_found(lang: Lang) -> Self {
         Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))

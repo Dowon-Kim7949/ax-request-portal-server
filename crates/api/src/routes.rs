@@ -23,7 +23,7 @@ use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
 use crate::{attachments, auth};
-use crate::{dashboard, notifications, projects, requests, teams, users};
+use crate::{dashboard, drafts, notifications, projects, requests, teams, users};
 
 /// The whole application.
 ///
@@ -100,6 +100,11 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "updateRegression" => |methods, filter| methods.on(filter, requests::actions::update_regression),
         "updateRelease" => |methods, filter| methods.on(filter, requests::actions::update_release),
         "regressionQueue" => |methods, filter| methods.on(filter, requests::actions::regression_queue),
+        "listDrafts" => |methods, filter| methods.on(filter, drafts::handlers::list),
+        "createDraft" => |methods, filter| methods.on(filter, drafts::handlers::create),
+        "getDraft" => |methods, filter| methods.on(filter, drafts::handlers::get),
+        "updateDraft" => |methods, filter| methods.on(filter, drafts::handlers::update),
+        "deleteDraft" => |methods, filter| methods.on(filter, drafts::handlers::delete),
         "listNotifications" => |methods, filter| methods.on(filter, notifications::handlers::list),
         "markNotificationRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_read),
         "markAllNotificationsRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_all_read),

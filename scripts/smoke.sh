@@ -34,8 +34,8 @@ curl -fsS "$API/healthz" | grep -q '"status":"ok"' || fail "/healthz is not ok"
 curl -fsS "$WEB/" | grep -q '<div id="root">' || fail "nginx does not serve the app"
 [[ "$(status "$WEB/mockServiceWorker.js")" == "404" ]] || fail "a real-backend build must not ship the mock service worker"
 
-[[ "$(status "$WEB/api/drafts")" == "501" ]] || fail "/api/drafts should reach the API (501 until implemented)"
-curl -s -H 'Accept-Language: en' "$WEB/api/drafts" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
+[[ "$(status "$WEB/api/drafts")" == "401" ]] || fail "/api/drafts should reach the API (401 without a sign-in)"
+curl -s -H 'Accept-Language: en' "$WEB/api/drafts" | grep -q '"code":"unauthorized"' || fail "/api/ errors must use the contract's body"
 [[ "$(status "$WEB/api/no-such-route")" == "404" ]] || fail "unknown API paths must be 404"
 
 # --- sign-in ---------------------------------------------------------------
@@ -101,11 +101,18 @@ attachment_url="$(json "$r" | field url)"
 curl -fsS -o /dev/null -D - "$WEB$attachment_url" | grep -qi '^content-type: image/png' || fail "the attachment is not served as image/png"
 [[ "$(status "$WEB${attachment_url}x")" == "404" ]] || fail "an altered attachment link must be 404"
 
+# A saved draft of the request, deleted when the request is filed from it.
+r="$(call -X POST -d "{\"step\":6,\"content\":{\"title\":\"Smoke request $stamp\"},\"clientId\":\"smoke-$stamp\"}" "$WEB/api/drafts")"
+[[ "$(code "$r")" == "201" ]] || fail "createDraft: $r"
+draft_id="$(json "$r" | field id)"
+call "$WEB/api/drafts" | grep -q "\"id\":\"$draft_id\"" || fail "listDrafts does not list the new draft"
+
 # A request in that project, with the attachment: filed, then the AI reports on it.
-req="{\"projectId\":\"$project_id\",\"type\":\"non_code\",\"title\":\"Smoke request $stamp\",\"targetIds\":[],\"currentBehavior\":\"\",\"desiredBehavior\":\"A smoke test files a request\",\"acceptanceCriteria\":[{\"text\":\"When the smoke test runs, the request is listed\"}],\"attachmentIds\":[\"$attachment_id\"]}"
+req="{\"projectId\":\"$project_id\",\"type\":\"non_code\",\"title\":\"Smoke request $stamp\",\"targetIds\":[],\"currentBehavior\":\"\",\"desiredBehavior\":\"A smoke test files a request\",\"acceptanceCriteria\":[{\"text\":\"When the smoke test runs, the request is listed\"}],\"attachmentIds\":[\"$attachment_id\"],\"draftId\":\"$draft_id\"}"
 r="$(call -X POST -d "$req" "$WEB/api/requests")"
 [[ "$(code "$r")" == "201" ]] && grep -q '"status":"reporting"' <<<"$r" || fail "createRequest: $r"
 grep -q "\"attachments\":\[{\"id\":\"$attachment_id\"" <<<"$r" || fail "the request does not carry its attachment: $r"
+[[ "$(code "$(call "$WEB/api/drafts/$draft_id")")" == "404" ]] || fail "filing the request did not delete its draft"
 request_id="$(json "$r" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')"
 [[ "$(code "$(call "$WEB/api/requests/$request_id")")" == "200" ]] || fail "getRequest #$request_id"
 call "$WEB/api/requests?scope=mine" | grep -q "\"title\":\"Smoke request $stamp\"" || fail "listRequests does not list the new request"
@@ -146,4 +153,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, an attachment, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, an attachment, a draft, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"
