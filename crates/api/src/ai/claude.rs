@@ -238,13 +238,13 @@ fn tokens(usage: &Value) -> Tokens {
 fn spend_of(body: &Value, requested: &str) -> Vec<Spend> {
     let model = body["model"].as_str().filter(|m| !m.is_empty()).unwrap_or(requested).to_owned();
     match body.get("usage") {
-        Some(usage) if usage.is_object() => vec![Spend { model, tokens: tokens(usage) }],
+        Some(usage) if usage.is_object() => vec![Spend { model, tokens: tokens(usage), cost_usd: None }],
         _ => Vec::new(),
     }
 }
 
 /// The names of the project's screens (`targets`), by id.
-fn screens(project: Option<&Project>) -> Vec<(String, String)> {
+pub(crate) fn screens(project: Option<&Project>) -> Vec<(String, String)> {
     project
         .map(|p| {
             p.targets
@@ -327,7 +327,7 @@ fn report_body(model: &str, request: &StoredRequest, project: Option<&Project>, 
     body
 }
 
-fn texts(value: &Value, max: usize) -> Vec<String> {
+pub(crate) fn texts(value: &Value, max: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for text in value.as_array().into_iter().flatten().filter_map(Value::as_str) {
         let text = text.trim();
@@ -342,7 +342,13 @@ fn texts(value: &Value, max: usize) -> Vec<String> {
 /// from Claude's answer. The verdict, evidence, changed screens, plan and wiki
 /// trust are the server's; criteria and rules are taken in the request's and
 /// project's order, whatever Claude returned for them.
-fn report_from(answer: &Value, request: &StoredRequest, project: Option<&Project>, lang: Lang, model: &str) -> Value {
+pub(crate) fn report_from(
+    answer: &Value,
+    request: &StoredRequest,
+    project: Option<&Project>,
+    lang: Lang,
+    model: &str,
+) -> Value {
     let d = &request.details;
     let out_of_scope = request.kind == "non_code";
     let verdict = if out_of_scope { "out_of_scope" } else { "undetermined" };

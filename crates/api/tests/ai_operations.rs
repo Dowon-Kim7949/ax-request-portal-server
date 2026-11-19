@@ -238,6 +238,7 @@ async fn usage_is_reported_and_stops_a_request_at_its_limit(pool: PgPool) {
         request_id: Some(1),
         user_id: requester_user.id,
         tokens: Tokens { input: 1_000_000, ..Tokens::default() },
+        cost_usd: None,
     };
     let entry = usage::book(&mut conn, "Asia/Seoul", &report).await.unwrap().unwrap();
     assert_eq!((entry.cost_usd, entry.cost_krw, entry.runtime.as_str()), (4.0, 5600.0, "api"));
@@ -248,6 +249,7 @@ async fn usage_is_reported_and_stops_a_request_at_its_limit(pool: PgPool) {
         request_id: None,
         user_id: requester_user.id,
         tokens: Tokens { input: 10_000, output: 2_000, ..Tokens::default() },
+        cost_usd: None,
     };
     let entry = usage::book(&mut conn, "Asia/Seoul", &precheck).await.unwrap().unwrap();
     assert_eq!((entry.cost_usd, entry.cost_krw), (0.0, 2.8));

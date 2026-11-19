@@ -7,9 +7,11 @@
 //! it cannot approve a merge, skip a review or move a request past a human
 //! checkpoint.
 
+pub mod agent;
 pub mod claude;
 pub mod handlers;
 pub mod jobs;
+pub mod runner;
 pub mod settings;
 pub mod usage;
 
@@ -57,10 +59,13 @@ pub struct Job {
 }
 
 /// One billed model call or agent run: the model that ran it and its tokens.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Spend {
     pub model: String,
     pub tokens: Tokens,
+    /// What the provider says the call cost, when it knows better than the
+    /// price table (a coding agent's own estimate); booked as given.
+    pub cost_usd: Option<f64>,
 }
 
 /// Why a job did not finish. `retry` is false when trying again would end

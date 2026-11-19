@@ -382,6 +382,7 @@ pub async fn precheck(
                     request_id: None,
                     user_id: current.user.id,
                     tokens: s.tokens,
+                    cost_usd: s.cost_usd,
                 };
                 usage::book(&mut conn, &state.time_zone.0, &call).await.map_err(ApiError::db(lang))?;
             }

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::settings::{self, Selection};
 use super::usage::{self, Call};
-use super::{Job as JobContext, Provider, Spend};
+use super::{Failure, Job as JobContext, Provider, Spend};
 use crate::config::AiSettings;
 use crate::lang::Lang;
 use crate::notifications;
@@ -79,21 +79,44 @@ pub async fn enqueue_for(
     Ok(())
 }
 
-struct Job {
-    id: i64,
-    request: i64,
-    task: Task,
-    lang: Lang,
-    attempts: i32,
+/// A claimed job.
+#[derive(Debug, Clone)]
+pub struct Job {
+    pub id: i64,
+    pub request: i64,
+    pub task: Task,
+    pub lang: Lang,
+    /// Including this one.
+    pub attempts: i32,
+    /// A runner's claim: the token its calls must carry. `None` for the
+    /// in-process worker.
+    pub claim: Option<Uuid>,
 }
 
-async fn claim(db: &PgPool) -> Result<Option<Job>, sqlx::Error> {
+/// Claims the next due job.
+///
+/// With a `lease` (a runner's claim) the job carries a fresh claim token and
+/// goes back to the pool if the runner is not heard from within the lease, as
+/// another attempt. Without one (the in-process worker) a job stays claimed
+/// until it ends; a restart puts unfinished ones back.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn claim(db: &PgPool, lease: Option<Duration>) -> Result<Option<Job>, sqlx::Error> {
+    let lease = lease.map(|l| l.as_secs_f64());
     let row = sqlx::query(
-        "update ai_jobs set status = 'running', started_at = now(), attempts = attempts + 1
-          where id = (select id from ai_jobs where status = 'queued' and run_after <= now()
+        "update ai_jobs
+            set status = 'running', started_at = now(), attempts = attempts + 1,
+                lease_until = case when $1::float8 is null then null else now() + make_interval(secs => $1) end,
+                claim = case when $1::float8 is null then null else gen_random_uuid() end
+          where id = (select id from ai_jobs
+                       where (status = 'queued' and run_after <= now())
+                          or (status = 'running' and lease_until < now())
                        order by run_after, id for update skip locked limit 1)
-          returning id, request_id, task, lang, attempts",
+          returning id, request_id, task, lang, attempts, claim",
     )
+    .bind(lease)
     .fetch_optional(db)
     .await?;
     let Some(row) = row else { return Ok(None) };
@@ -105,49 +128,67 @@ async fn claim(db: &PgPool) -> Result<Option<Job>, sqlx::Error> {
         task: if task == "work" { Task::Work } else { Task::Report },
         lang: if lang == "en" { Lang::En } else { Lang::Ko },
         attempts: row.try_get("attempts")?,
+        claim: row.try_get("claim")?,
     }))
 }
 
 async fn finish(db: impl sqlx::PgExecutor<'_>, job: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("update ai_jobs set status = 'done', finished_at = now() where id = $1").bind(job).execute(db).await?;
+    sqlx::query("update ai_jobs set status = 'done', finished_at = now(), lease_until = null where id = $1")
+        .bind(job)
+        .execute(db)
+        .await?;
     Ok(())
 }
 
-/// Runs one due job, if there is one. Returns whether there was.
+/// The request a claimed job is for, while it still waits for the job.
+/// Otherwise (cancelled, or moved on without the AI) the job is closed and
+/// `None` is returned.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn request_for(db: &PgPool, job: &Job) -> Result<Option<StoredRequest>, sqlx::Error> {
+    let request = {
+        let mut conn = db.acquire().await?;
+        StoredRequest::find(&mut conn, job.request).await?
+    };
+    match request.filter(|r| r.status == job.task.waits_in()) {
+        Some(request) => Ok(Some(request)),
+        None => {
+            finish(db, job.id).await?;
+            Ok(None)
+        }
+    }
+}
+
+/// What the job runs with: the project, the model, the language.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn context(db: &PgPool, job: &Job, request: &StoredRequest) -> Result<JobContext, sqlx::Error> {
+    let mut conn = db.acquire().await?;
+    let project = Project::find(&mut *conn, &request.project_id.to_string()).await?;
+    let selection = match (job.task, field(&request.details, "work").get("agent")) {
+        // A work run uses the agent recorded when it started.
+        (Task::Work, Some(agent)) => Selection {
+            provider: agent["provider"].as_str().unwrap_or("anthropic").to_owned(),
+            model: agent["model"].as_str().unwrap_or_default().to_owned(),
+        },
+        _ => settings::selections(&mut conn).await?.resolve(&request.project_id.to_string(), job.task.as_str()).clone(),
+    };
+    Ok(JobContext { lang: job.lang, selection, project })
+}
+
+/// Runs one due job in this process, if there is one. Returns whether there was.
 ///
 /// # Errors
 ///
 /// Database failures (a provider's failure is recorded on the job instead).
 pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSettings) -> Result<bool, sqlx::Error> {
-    let Some(job) = claim(db).await? else { return Ok(false) };
-    let expected = job.task.waits_in();
-    let request = {
-        let mut conn = db.acquire().await?;
-        StoredRequest::find(&mut conn, job.request).await?
-    };
-    let Some(request) = request.filter(|r| r.status == expected) else {
-        // Cancelled, or moved on without the AI: nothing left to do.
-        finish(db, job.id).await?;
-        return Ok(true);
-    };
-
-    let context = {
-        let mut conn = db.acquire().await?;
-        let project = Project::find(&mut *conn, &request.project_id.to_string()).await?;
-        let selection = match (job.task, field(&request.details, "work").get("agent")) {
-            // A work run uses the agent recorded when it started.
-            (Task::Work, Some(agent)) => Selection {
-                provider: agent["provider"].as_str().unwrap_or("anthropic").to_owned(),
-                model: agent["model"].as_str().unwrap_or_default().to_owned(),
-            },
-            _ => settings::selections(&mut conn)
-                .await?
-                .resolve(&request.project_id.to_string(), job.task.as_str())
-                .clone(),
-        };
-        JobContext { lang: job.lang, selection, project }
-    };
-
+    let Some(job) = claim(db, None).await? else { return Ok(false) };
+    let Some(request) = request_for(db, &job).await? else { return Ok(true) };
+    let context = context(db, &job, &request).await?;
     let (outcome, spend) = match job.task {
         Task::Report => {
             let reply = provider.report(&request, &context).await;
@@ -158,9 +199,31 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
             (reply.outcome.map(Done::Work), reply.spend)
         }
     };
+    complete(db, &job, &request, &context.selection, outcome, &spend, settings).await?;
+    Ok(true)
+}
+
+/// Ends a job with what came of it: books every call, then applies the AI's
+/// event if the request still waits for it. A failure worth retrying puts the
+/// job back (until [`MAX_ATTEMPTS`]); any other failure gives up, and the AI's
+/// turn ends with a result saying it could not do the job.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn complete(
+    db: &PgPool,
+    job: &Job,
+    request: &StoredRequest,
+    selection: &Selection,
+    outcome: Result<Done, Failure>,
+    spend: &[Spend],
+    settings: &AiSettings,
+) -> Result<(), sqlx::Error> {
+    let expected = job.task.waits_in();
     // Every call is booked, whatever became of it, against the person whose
     // step started the job.
-    let cost_krw = book(db, &job, &request, &context.selection, &spend).await?;
+    let cost_krw = book(db, job, request, selection, spend).await?;
     let (done, gave_up) = match outcome {
         Ok(done) => (done, false),
         Err(failure) => {
@@ -168,7 +231,7 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
             tracing::warn!(job = job.id, request = job.request, %error, retry = failure.retry, "AI job failed");
             if failure.retry && job.attempts < MAX_ATTEMPTS {
                 sqlx::query(
-                    "update ai_jobs set status = 'queued', error = $2,
+                    "update ai_jobs set status = 'queued', error = $2, claim = null, lease_until = null,
                             run_after = now() + make_interval(secs => $3)
                       where id = $1",
                 )
@@ -177,18 +240,21 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
                 .bind(f64::from(job.attempts * 30))
                 .execute(db)
                 .await?;
-                return Ok(true);
+                return Ok(());
             }
-            sqlx::query("update ai_jobs set status = 'failed', error = $2, finished_at = now() where id = $1")
-                .bind(job.id)
-                .bind(error)
-                .execute(db)
-                .await?;
+            sqlx::query(
+                "update ai_jobs set status = 'failed', error = $2, finished_at = now(), lease_until = null
+                  where id = $1",
+            )
+            .bind(job.id)
+            .bind(error)
+            .execute(db)
+            .await?;
             // Given up: the AI's turn ends with a result saying so, and the
             // request goes on to the developer, who decides by hand. Without
             // this it would wait in `reporting` or `in_progress` for good:
             // only the AI's own event leads out of them.
-            (given_up(job.task, &request, job.lang), true)
+            (given_up(job.task, request, job.lang), true)
         }
     };
 
@@ -200,7 +266,7 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
             finish(&mut *tx, job.id).await?;
         }
         tx.commit().await?;
-        return Ok(true);
+        return Ok(());
     };
     let at = store::now_iso(&mut *tx).await?;
     let event = match done {
@@ -217,7 +283,7 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
         finish(&mut *tx, job.id).await?;
     }
     tx.commit().await?;
-    Ok(true)
+    Ok(())
 }
 
 /// What the AI hands over when its job gives up, in the job's language.
@@ -258,6 +324,7 @@ async fn book(
             request_id: Some(request.id),
             user_id: user,
             tokens: s.tokens,
+            cost_usd: s.cost_usd,
         };
         // The entry's business date is not used here, so any zone will do.
         match usage::book(&mut conn, "UTC", &call).await? {
@@ -284,7 +351,8 @@ pub fn started_by(request: &StoredRequest, status: Status) -> Uuid {
     request.requester_id
 }
 
-enum Done {
+/// What a job produced.
+pub enum Done {
     Report(super::ReportResult),
     Work(super::WorkResult),
 }
@@ -352,7 +420,9 @@ pub async fn run_pending<P: Provider>(db: &PgPool, provider: &P, settings: &AiSe
 pub fn spawn<P: Provider>(db: PgPool, provider: P, settings: AiSettings) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if let Err(error) =
-            sqlx::query("update ai_jobs set status = 'queued' where status = 'running'").execute(&db).await
+            sqlx::query("update ai_jobs set status = 'queued' where status = 'running' and claim is null")
+                .execute(&db)
+                .await
         {
             tracing::warn!(%error, "could not requeue unfinished AI jobs");
         }

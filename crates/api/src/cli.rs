@@ -5,6 +5,7 @@
 //! ax-api migrate
 //! ax-api user create --email E --name N --role admin [--password-stdin]
 //! ax-api user set-password --email E [--password-stdin]
+//! ax-api runner                            # take AI jobs from a server (see `runner`)
 //! ```
 //!
 //! Passwords never go on the command line, where shell history and process
@@ -35,6 +36,9 @@ pub enum Command {
     /// Provision accounts. Operators can only be made here, never through the API.
     #[command(subcommand)]
     User(UserCommand),
+    /// Take AI jobs from a server and run them with Claude Code on a clone of
+    /// the project (settings: `AX_RUNNER_*`, `AX_GITHUB_*`, `AX_ANTHROPIC_*`).
+    Runner,
 }
 
 #[derive(Debug, Subcommand)]

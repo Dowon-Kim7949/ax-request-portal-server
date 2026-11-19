@@ -159,6 +159,9 @@ pub struct Call<'a> {
     /// The person whose action started the call.
     pub user_id: Uuid,
     pub tokens: Tokens,
+    /// Booked instead of the price table's figure when the provider knows the
+    /// cost better; the model must still be in the table.
+    pub cost_usd: Option<f64>,
 }
 
 fn select(time_zone_param: &str) -> String {
@@ -182,7 +185,7 @@ fn select(time_zone_param: &str) -> String {
 pub async fn book(db: &mut PgConnection, time_zone: &str, call: &Call<'_>) -> Result<Option<Entry>, sqlx::Error> {
     let pricing = settings::pricing(&mut *db).await?;
     let Some(price) = pricing.price_of(call.selection) else { return Ok(None) };
-    let usd = cost_usd(call.tokens, price);
+    let usd = call.cost_usd.unwrap_or_else(|| cost_usd(call.tokens, price));
     let row = sqlx::query(&format!(
         "with booked as (
            insert into ai_usage (id, task, provider, model, runtime, request_id, user_id, team_id,

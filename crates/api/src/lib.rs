@@ -24,6 +24,7 @@ pub mod projects;
 pub mod requests;
 pub mod roles;
 pub mod routes;
+pub mod runner;
 pub mod state;
 pub mod teams;
 pub mod users;

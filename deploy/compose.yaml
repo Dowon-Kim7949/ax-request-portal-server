@@ -44,6 +44,8 @@ services:
       AX_ANTHROPIC_API_KEY_PRECHECK: ${AX_ANTHROPIC_API_KEY_PRECHECK:-}
       AX_ANTHROPIC_API_KEY_REPORT: ${AX_ANTHROPIC_API_KEY_REPORT:-}
       AX_ANTHROPIC_API_KEY_WORK: ${AX_ANTHROPIC_API_KEY_WORK:-}
+      # Set, the AI jobs wait for the runner below instead of running here.
+      AX_RUNNER_TOKEN: ${AX_RUNNER_TOKEN:-}
       AX_DRAFTS_PER_ACCOUNT: ${AX_DRAFTS_PER_ACCOUNT:-20}
       AX_PUBLIC_PATH: ${AX_PUBLIC_PATH:-/api}
       # Inside the "uploads" volume below.
@@ -67,6 +69,29 @@ services:
       - ax-backend
     ports:
       - "8088:80"
+
+  # The runner: Claude Code on clones of the projects' GitHub repositories.
+  # Off by default; start it with
+  #   docker compose -f deploy/compose.yaml --profile runner up -d --build
+  # after setting AX_RUNNER_TOKEN, AX_GITHUB_TOKEN and the Claude keys in .env.
+  ax-runner:
+    profiles: ["runner"]
+    build:
+      context: ..
+      dockerfile: deploy/runner.Dockerfile
+    environment:
+      AX_RUNNER_SERVER: http://ax-backend:8080
+      AX_RUNNER_TOKEN: ${AX_RUNNER_TOKEN:-}
+      AX_GITHUB_TOKEN: ${AX_GITHUB_TOKEN:-}
+      AX_GITHUB_API: ${AX_GITHUB_API:-https://api.github.com}
+      AX_ANTHROPIC_API_KEY: ${AX_ANTHROPIC_API_KEY:-}
+      AX_ANTHROPIC_API_KEY_REPORT: ${AX_ANTHROPIC_API_KEY_REPORT:-}
+      AX_ANTHROPIC_API_KEY_WORK: ${AX_ANTHROPIC_API_KEY_WORK:-}
+      AX_RUNNER_TIMEOUT: ${AX_RUNNER_TIMEOUT:-30m}
+      RUST_LOG: ${RUST_LOG:-info}
+    depends_on:
+      - ax-backend
+    restart: unless-stopped
 
 volumes:
   db-data:
