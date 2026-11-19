@@ -15,6 +15,7 @@ pub mod cli;
 pub mod config;
 pub mod dashboard;
 pub mod db;
+pub mod drafts;
 pub mod error;
 pub mod implemented;
 pub mod lang;

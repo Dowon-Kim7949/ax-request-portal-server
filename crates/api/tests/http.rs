@@ -117,8 +117,6 @@ async fn unknown_paths_get_the_contract_error_in_the_requested_language() {
 
 #[tokio::test]
 async fn a_base_path_moves_the_contract_but_not_the_probes() {
-    let (status, _) = call(app("/api"), "GET", "/api/drafts", "en").await;
-    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
     let (status, _) = call(app("/api"), "GET", "/api/auth/me", "en").await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 

@@ -4,7 +4,7 @@ use sqlx::PgPool;
 
 use crate::attachments::Files;
 
-use crate::config::{AiSettings, BusinessTimeZone, SessionPolicy, SetupLinkPolicy};
+use crate::config::{AiSettings, BusinessTimeZone, DraftPolicy, SessionPolicy, SetupLinkPolicy};
 use crate::error::ApiError;
 use crate::lang::Lang;
 
@@ -16,6 +16,7 @@ pub struct AppState {
     pub setup_links: SetupLinkPolicy,
     pub time_zone: BusinessTimeZone,
     pub ai: AiSettings,
+    pub drafts: DraftPolicy,
     /// Uploaded attachments and their download links.
     pub files: Files,
 }

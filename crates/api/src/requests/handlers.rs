@@ -58,8 +58,9 @@ pub fn present(user: &User, request: &StoredRequest, files: &Files) -> Value {
 /// (`unknownTarget`) for a target the project does not have, `400`
 /// (`attachmentNotFound`, one issue per index) for attachments that are
 /// missing or someone else's; the rest are kept once each, in order. The
-/// request goes to the project's first owner. `draftId` is ignored until saved
-/// drafts are kept on the server.
+/// request goes to the project's first owner. With `draftId`, the caller's
+/// saved draft of that id is deleted in the same transaction (anyone else's,
+/// or a missing one, is ignored).
 pub async fn create(
     State(state): State<AppState>,
     lang: Lang,
@@ -122,6 +123,14 @@ pub async fn create(
     )
     .await
     .map_err(ApiError::db(lang))?;
+    if let Some(draft_id) = &draft.draft_id {
+        sqlx::query("delete from drafts where id = $1 and owner_id = $2")
+            .bind(draft_id)
+            .bind(user.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(ApiError::db(lang))?;
+    }
     // The AI writes the feasibility report in the requester's language.
     ai::jobs::enqueue_for(&mut tx, id, rule.to, lang).await.map_err(ApiError::db(lang))?;
     let request = StoredRequest::find(&mut tx, id).await.map_err(ApiError::db(lang))?;

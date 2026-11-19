@@ -11,6 +11,7 @@
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports and runs work (`stub` until one is wired)|
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
+//! | `AX_DRAFTS_PER_ACCOUNT` | `20`     | How many saved drafts one person may keep                  |
 //! | `AX_UPLOAD_DIR`   | `uploads`      | Where uploaded attachments are kept (created if missing)   |
 //! | `AX_PUBLIC_PATH`  | `/api`         | Where the browser reaches this server, for attachment links |
 //!
@@ -33,6 +34,7 @@ pub struct Config {
     pub setup_links: SetupLinkPolicy,
     pub time_zone: BusinessTimeZone,
     pub ai: AiSettings,
+    pub drafts: DraftPolicy,
     /// `AX_UPLOAD_DIR`: one file per attachment.
     pub upload_dir: PathBuf,
     /// `AX_PUBLIC_PATH`: the path the browser puts before this server's
@@ -56,6 +58,19 @@ pub struct AiSettings {
 impl Default for AiSettings {
     fn default() -> Self {
         Self { provider: "stub".to_owned(), scope_check: true }
+    }
+}
+
+/// Saved drafts: how many one person may keep (the frontend's template
+/// setting `drafts.maxPerAccount`). One more is `409 limit_reached`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DraftPolicy {
+    pub per_account: u32,
+}
+
+impl Default for DraftPolicy {
+    fn default() -> Self {
+        Self { per_account: 20 }
     }
 }
 
@@ -186,6 +201,15 @@ impl Config {
         };
         let ai = AiSettings { provider, scope_check };
 
+        let drafts = match non_empty("AX_DRAFTS_PER_ACCOUNT") {
+            None => DraftPolicy::default(),
+            Some(value) => DraftPolicy {
+                per_account: value.parse().ok().filter(|n| *n > 0).ok_or_else(|| {
+                    ConfigError(format!("AX_DRAFTS_PER_ACCOUNT must be a whole number above 0, got {value:?}"))
+                })?,
+            },
+        };
+
         let upload_dir = PathBuf::from(non_empty("AX_UPLOAD_DIR").unwrap_or_else(|| "uploads".to_owned()));
         let public_path = non_empty("AX_PUBLIC_PATH").unwrap_or_else(|| "/api".to_owned());
         if !public_path.starts_with('/') || public_path.contains("//") {
@@ -201,6 +225,7 @@ impl Config {
             setup_links,
             time_zone,
             ai,
+            drafts,
             upload_dir,
             public_path,
         })
@@ -253,6 +278,15 @@ mod tests {
     #[test]
     fn base_path_loses_its_trailing_slash() {
         assert_eq!(config(&[("AX_BASE_PATH", "/api/")]).unwrap().base_path, "/api");
+    }
+
+    #[test]
+    fn drafts_per_account() {
+        assert_eq!(config(&[]).unwrap().drafts.per_account, 20);
+        assert_eq!(config(&[("AX_DRAFTS_PER_ACCOUNT", "5")]).unwrap().drafts.per_account, 5);
+        for bad in ["0", "-1", "many", "2.5"] {
+            assert!(config(&[("AX_DRAFTS_PER_ACCOUNT", bad)]).is_err(), "{bad}");
+        }
     }
 
     #[test]

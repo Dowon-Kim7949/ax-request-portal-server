@@ -92,6 +92,7 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         setup_links: config.setup_links,
         time_zone: config.time_zone.clone(),
         ai: config.ai.clone(),
+        drafts: config.drafts,
         files,
     };
     let app = router(state, &config);
