@@ -7,6 +7,7 @@
 
 pub mod accounts;
 pub mod ai;
+pub mod attachments;
 pub mod auth;
 pub mod body;
 pub mod calendar;

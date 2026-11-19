@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`), 대시보드와 배포 일정(`dashboard`, `releases`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 15개(임시 저장, 첨부, 운영자의 AI 설정·가격·예산·사용량)도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 첨부(`uploadAttachment`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`), 대시보드와 배포 일정(`dashboard`, `releases`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 14개(임시 저장, 운영자의 AI 설정·가격·예산·사용량)도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 임시 저장, AI 설정·가격·예산·사용량, 그리고 실현 가능성 리포트를 쓰는 Claude 제공자입니다.
 
 ## 계약을 맞추는 방법
 
@@ -123,6 +123,9 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 날짜와 달은 모두 업무 달력(`AX_TIME_ZONE`) 기준입니다.
   - AI 사용량과 예산을 서버에 저장하기 전까지 AI 비용 항목은 0(한도 없음)입니다.
 - 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
+- **첨부.** `uploadAttachment`(`request:create`)는 multipart 필드 `file`을 받아 무작위 id로 `AX_UPLOAD_DIR`에 저장합니다. 10MB까지 받습니다. 파일이 없거나 한도를 넘으면 `400`이고, 목 API처럼 권한보다 먼저 검사합니다. 올린 사람만 요청에 붙일 수 있고, 요청에는 첨부마다 한 번씩, 보낸 순서대로 들어갑니다.
+  - 계약에는 내려받기 operation이 없고, `<img>`는 bearer 토큰을 보낼 수 없습니다. 그래서 `Attachment.url`은 계약 밖의 유일한 경로인 `GET /files/{id}`로 가는 서명 링크입니다. id와 만료 시각의 HMAC이고, 서버가 첨부를 보여 줄 때마다 새로 만들며, 12~24시간 동안 쓸 수 있습니다. 바뀌었거나 만료된 링크는 `404`입니다. 키는 처음 시작할 때 만들어 데이터베이스(`server_secrets`)에 두므로 따로 설정할 비밀값이 없습니다.
+  - 프런트엔드가 화면에서 바로 여는 형식(PNG, JPEG, GIF, WebP, AVIF, BMP, PDF)만 원래 형식으로 보냅니다. SVG와 HTML을 포함한 나머지는 내려받도록 `application/octet-stream`으로 보내고, 항상 `nosniff`를 붙입니다.
 
 ## 설정
 
@@ -139,6 +142,8 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_AI_PROVIDER` | `stub` | 리포트를 쓰고 작업을 하는 제공자. 지금은 `stub`만 쓸 수 있습니다 |
 | `AX_SCOPE_CHECK` | `true` | 구현 가능 또는 조건부 리포트가 나오면, 개발자 검토 전에 요청자가 AI가 이해한 범위를 확인합니다. 프런트엔드의 `appConfig.workflow.scopeCheck`와 같은 값으로 둡니다. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |
+| `AX_UPLOAD_DIR` | `uploads` | 올린 첨부를 두는 곳. 없으면 만듭니다. Compose에서는 `uploads` 볼륨에 둡니다. |
+| `AX_PUBLIC_PATH` | `/api` | 브라우저가 이 서버의 경로 앞에 붙이는 경로(프런트엔드 빌드의 `VITE_API_BASE_URL`). 첨부 링크가 이 경로로 시작합니다. |
 | `RUST_LOG` | `info` | 로그 필터 |
 
 상태 확인: `GET /healthz`(프로세스, 버전, 고정한 계약 커밋)와 `GET /readyz`(DB 연결)는 `AX_BASE_PATH`와 상관없이 루트에 있습니다.

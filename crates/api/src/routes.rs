@@ -3,10 +3,13 @@
 //!
 //! To implement an operation: add its `operationId` to
 //! [`IMPLEMENTED`](crate::implemented::IMPLEMENTED) and an arm to [`implemented`].
+//!
+//! One route is not in the contract: `GET /files/{id}`, the signed download
+//! link that every `Attachment.url` points at (see [`crate::attachments`]).
 
 use std::collections::BTreeMap;
 
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, MethodRouter, get};
@@ -14,12 +17,12 @@ use axum::{Json, Router};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
-use crate::auth;
 use crate::config::Config;
 use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
+use crate::{attachments, auth};
 use crate::{dashboard, notifications, projects, requests, teams, users};
 
 /// The whole application.
@@ -27,7 +30,7 @@ use crate::{dashboard, notifications, projects, requests, teams, users};
 /// `/healthz` and `/readyz` sit at the root whatever `base_path` is, so probes
 /// do not depend on how the proxy maps the API.
 pub fn router(state: AppState, config: &Config) -> Router {
-    let api = contract_routes().fallback(not_found);
+    let api = contract_routes().route("/files/{id}", get(attachments::handlers::download)).fallback(not_found);
     let probes = Router::new().route("/healthz", get(healthz)).route("/readyz", get(readyz));
     let app = if config.base_path == "/" {
         probes.merge(api)
@@ -102,6 +105,9 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "markAllNotificationsRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_all_read),
         "getNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::get_settings),
         "updateNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::update_settings),
+        "uploadAttachment" => |methods, filter| {
+            methods.on(filter, attachments::handlers::upload).layer(DefaultBodyLimit::max(attachments::BODY_LIMIT))
+        },
         "dashboard" => |methods, filter| methods.on(filter, dashboard::summary),
         "releases" => |methods, filter| methods.on(filter, dashboard::releases),
         _ => return None,

@@ -14,6 +14,7 @@ use super::lifecycle::{Event, Status};
 use super::precheck;
 use super::store::{self, Actor, StoredRequest, iso};
 use crate::ai;
+use crate::attachments::{self, Attachment, Files};
 use crate::auth::{self, CurrentUser};
 use crate::error::{ApiError, Issue};
 use crate::lang::Lang;
@@ -33,10 +34,16 @@ pub fn parse_id(value: &str) -> Option<i64> {
     value.parse::<i64>().ok().filter(|id| (1..=MAX_ID).contains(id))
 }
 
-/// The request as the person may see it: `aiUsage` only with `report:read`.
-/// Until AI usage is recorded (a later step) it is empty, with no limit.
-pub fn present(user: &User, request: &StoredRequest) -> Value {
+/// The request as the person may see it: attachments with fresh download
+/// links, and `aiUsage` only with `report:read`. Until AI usage is recorded (a
+/// later step) it is empty, with no limit.
+pub fn present(user: &User, request: &StoredRequest, files: &Files) -> Value {
     let mut json = request.to_json();
+    if let Some(attachments) = json.get_mut("attachments").and_then(Value::as_array_mut) {
+        for attachment in attachments {
+            *attachment = files.present(attachment);
+        }
+    }
     if user.role.can(Permission::ReportRead) {
         json["aiUsage"] = json!({ "spentKrw": 0, "limitKrw": 0, "entries": [] });
     }
@@ -49,7 +56,8 @@ pub fn present(user: &User, request: &StoredRequest) -> Value {
 ///
 /// `400` (`projectNotFound`) for an unknown or inactive project, `400`
 /// (`unknownTarget`) for a target the project does not have, `400`
-/// (`attachmentNotFound`) for attachments that are not the caller's. The
+/// (`attachmentNotFound`, one issue per index) for attachments that are
+/// missing or someone else's; the rest are kept once each, in order. The
 /// request goes to the project's first owner. `draftId` is ignored until saved
 /// drafts are kept on the server.
 pub async fn create(
@@ -71,14 +79,15 @@ pub async fn create(
     if let Some(unknown) = draft.target_ids.iter().find(|t| !targets.contains(&t.as_str())) {
         return Err(ApiError::unknown_target(lang, unknown));
     }
-    // Uploads are not stored yet, so no attachment id can be the caller's.
-    if !draft.attachment_ids.is_empty() {
-        let paths = (0..draft.attachment_ids.len()).map(|i| format!("attachmentIds.{i}")).collect();
+    let (attachments, missing) =
+        attachments::owned(db, user.id, &draft.attachment_ids).await.map_err(ApiError::db(lang))?;
+    if !missing.is_empty() {
+        let paths = missing.iter().map(|i| format!("attachmentIds.{i}")).collect();
         return Err(ApiError::attachment_not_found(lang, paths));
     }
 
     let today = store::today(db, &state.time_zone.0).await.map_err(ApiError::db(lang))?;
-    let details = details_of(&draft, &precheck::advise(&draft, &today, lang));
+    let details = details_of(&draft, &precheck::advise(&draft, &today, lang), &attachments);
     let assignee = project.owner_ids.first().copied();
 
     let mut tx = db.begin().await.map_err(ApiError::db(lang))?;
@@ -118,12 +127,12 @@ pub async fn create(
     let request = StoredRequest::find(&mut tx, id).await.map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
     let request = request.ok_or_else(|| ApiError::internal(lang))?;
-    Ok((StatusCode::CREATED, Json(present(user, &request))))
+    Ok((StatusCode::CREATED, Json(present(user, &request, &state.files))))
 }
 
 /// The JSONB part of a new request: everything but the columns, keys left out
 /// rather than empty, as the mock API builds it.
-fn details_of(draft: &Draft, advice: &[precheck::Advice]) -> Map<String, Value> {
+fn details_of(draft: &Draft, advice: &[precheck::Advice], attachments: &[Attachment]) -> Map<String, Value> {
     let mut d = Map::new();
     d.insert("targetIds".into(), json!(draft.target_ids));
     if let Some(other) = draft.target_other.as_deref().filter(|o| !o.is_empty()) {
@@ -178,7 +187,7 @@ fn details_of(draft: &Draft, advice: &[precheck::Advice]) -> Map<String, Value> 
     if let Some(out) = draft.out_of_scope.as_deref().filter(|o| !o.is_empty()) {
         d.insert("outOfScope".into(), json!(out));
     }
-    d.insert("attachments".into(), json!([]));
+    d.insert("attachments".into(), attachments.iter().map(Attachment::to_json).collect());
     if let Some(reason) = draft.desired_date_reason.as_deref().filter(|r| !r.is_empty()) {
         d.insert("desiredDateReason".into(), json!(reason));
     }
@@ -219,7 +228,7 @@ pub async fn get(
     if !request.can_read(&current.user, &owners) {
         return Err(ApiError::request_not_found(lang, id));
     }
-    Ok(Json(present(&current.user, &request)))
+    Ok(Json(present(&current.user, &request, &state.files)))
 }
 
 /// `GET /requests?scope&status&projectId&q`: summaries, most recently changed

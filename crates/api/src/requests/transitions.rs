@@ -80,7 +80,7 @@ pub async fn transition(
         .await
         .map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request)))
+    Ok(Json(present(user, &request, &state.files)))
 }
 
 /// The request, locked, with its project's owners; `404` when it does not

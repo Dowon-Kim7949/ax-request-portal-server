@@ -89,10 +89,23 @@ r="$(call -X POST -d "$project" "$WEB/api/projects")"
 call "$WEB/api/projects" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listProjects does not list the new project"
 project_id="$(json "$r" | sed -n 's/^{"id":"\([^"]*\)".*/\1/p')"
 
-# A request in that project: filed, then the AI reports on it.
-req="{\"projectId\":\"$project_id\",\"type\":\"non_code\",\"title\":\"Smoke request $stamp\",\"targetIds\":[],\"currentBehavior\":\"\",\"desiredBehavior\":\"A smoke test files a request\",\"acceptanceCriteria\":[{\"text\":\"When the smoke test runs, the request is listed\"}],\"attachmentIds\":[]}"
+# An attachment, uploaded through nginx and served back through its signed link.
+# The file goes in on standard input, which every curl build reads the same way.
+r="$(printf 'smoke %s' "$stamp" | curl -s -w '
+%{http_code}' -H "Authorization: Bearer $token" -H 'Accept-Language: en'   -F "file=@-;filename=smoke.png;type=image/png" "$WEB/api/attachments")"
+[[ "$(code "$r")" == "201" ]] || fail "uploadAttachment: $r"
+attachment_id="$(json "$r" | field id)"
+attachment_url="$(json "$r" | field url)"
+[[ "$attachment_url" == /api/files/* ]] || fail "the attachment link does not go through /api: $r"
+[[ "$(curl -fsS "$WEB$attachment_url")" == "smoke $stamp" ]] || fail "the attachment link does not serve the file"
+curl -fsS -o /dev/null -D - "$WEB$attachment_url" | grep -qi '^content-type: image/png' || fail "the attachment is not served as image/png"
+[[ "$(status "$WEB${attachment_url}x")" == "404" ]] || fail "an altered attachment link must be 404"
+
+# A request in that project, with the attachment: filed, then the AI reports on it.
+req="{\"projectId\":\"$project_id\",\"type\":\"non_code\",\"title\":\"Smoke request $stamp\",\"targetIds\":[],\"currentBehavior\":\"\",\"desiredBehavior\":\"A smoke test files a request\",\"acceptanceCriteria\":[{\"text\":\"When the smoke test runs, the request is listed\"}],\"attachmentIds\":[\"$attachment_id\"]}"
 r="$(call -X POST -d "$req" "$WEB/api/requests")"
 [[ "$(code "$r")" == "201" ]] && grep -q '"status":"reporting"' <<<"$r" || fail "createRequest: $r"
+grep -q "\"attachments\":\[{\"id\":\"$attachment_id\"" <<<"$r" || fail "the request does not carry its attachment: $r"
 request_id="$(json "$r" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')"
 [[ "$(code "$(call "$WEB/api/requests/$request_id")")" == "200" ]] || fail "getRequest #$request_id"
 call "$WEB/api/requests?scope=mine" | grep -q "\"title\":\"Smoke request $stamp\"" || fail "listRequests does not list the new request"
@@ -133,4 +146,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, an attachment, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"

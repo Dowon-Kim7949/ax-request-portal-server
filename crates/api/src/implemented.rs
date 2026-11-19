@@ -31,6 +31,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "sendPreviewFeedback",
     "updateRegression",
     "updateRelease",
+    "uploadAttachment",
     "regressionQueue",
     "listNotifications",
     "markNotificationRead",
