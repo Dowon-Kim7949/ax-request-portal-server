@@ -108,6 +108,8 @@ r="$(call -X POST -d '{"event":"cancel","reason":"smoke test"}' "$WEB/api/reques
 [[ "$(code "$r")" == "200" ]] && grep -q '"status":"cancelled"' <<<"$r" || fail "transitionRequest (cancel): $r"
 [[ "$(code "$(call "$WEB/api/notifications")")" == "200" ]] || fail "listNotifications"
 [[ "$(code "$(call "$WEB/api/me/notification-settings")")" == "200" ]] || fail "getNotificationSettings"
+call "$WEB/api/dashboard/summary" | grep -q '"received":' || fail "the dashboard does not answer"
+[[ "$(code "$(call "$WEB/api/releases")")" == "200" ]] || fail "the release schedule does not answer"
 
 # The person sets a password through a one-time setup link, then signs in with it.
 r="$(call -X POST "$WEB/api/users/$member_id/setup-link")"
