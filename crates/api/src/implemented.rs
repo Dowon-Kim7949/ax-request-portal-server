@@ -37,6 +37,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "markAllNotificationsRead",
     "getNotificationSettings",
     "updateNotificationSettings",
+    "dashboard",
+    "releases",
 ];
 
 #[cfg(test)]

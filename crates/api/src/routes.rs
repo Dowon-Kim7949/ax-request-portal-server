@@ -20,7 +20,7 @@ use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
-use crate::{notifications, projects, requests, teams, users};
+use crate::{dashboard, notifications, projects, requests, teams, users};
 
 /// The whole application.
 ///
@@ -102,6 +102,8 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "markAllNotificationsRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_all_read),
         "getNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::get_settings),
         "updateNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::update_settings),
+        "dashboard" => |methods, filter| methods.on(filter, dashboard::summary),
+        "releases" => |methods, filter| methods.on(filter, dashboard::releases),
         _ => return None,
     })
 }

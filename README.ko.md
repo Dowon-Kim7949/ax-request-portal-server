@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 17개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`), 대시보드와 배포 일정(`dashboard`, `releases`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 15개(임시 저장, 첨부, 운영자의 AI 설정·가격·예산·사용량)도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
 
 ## 계약을 맞추는 방법
 
@@ -112,6 +112,16 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 실패한 작업은 30초 뒤, 60초 뒤 두 번 더 시도합니다. 그래도 실패하면 사람이 처리하도록 남겨 둡니다.
   - AI는 사람의 이벤트를 보내지 않습니다. 그래서 머지를 승인하거나, 검토를 건너뛰거나, 사람이 확인할 단계를 넘길 수 없습니다.
 - 지금 있는 제공자는 `stub`뿐입니다. 작업을 넣은 사람의 언어로 "AI 제공자가 연결되지 않았다"고 알립니다. 가능성은 판단하지 않고(`undetermined`) 코드도 바꾸지 않습니다(`outcome: error`). 그래서 개발자가 직접 판단하면서 상태 전이 전체를 끝까지 쓸 수 있습니다.
+- **대시보드와 배포 일정.**
+  - `dashboard`(`dashboard:view`)는 한 달 동안 접수된 요청과 반영된 요청을 셉니다.
+    - 대상 달을 지정하지 않으면 이번 달입니다.
+    - 이번 달처럼 아직 끝나지 않은 달은 지난달의 같은 날짜 범위와 비교합니다.
+    - 평균 소요 기간, 진행 중인 일과 지연된 일, 이번 주 배포 예정, 확인이 필요한 일도 함께 보여 줍니다.
+  - `releases`(`schedule:view`)는 회사 전체의 배포 일정입니다.
+    - 각 요청은 실제로 반영된 날에 놓이고, 아직 반영되지 않았으면 예정일에 놓입니다.
+    - 요청마다 보는 사람이 그 요청을 열 수 있는지 알려 줍니다.
+  - 날짜와 달은 모두 업무 달력(`AX_TIME_ZONE`) 기준입니다.
+  - AI 사용량과 예산을 서버에 저장하기 전까지 AI 비용 항목은 0(한도 없음)입니다.
 - 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
 
 ## 설정
