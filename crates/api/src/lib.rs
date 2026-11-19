@@ -14,6 +14,8 @@ pub mod db;
 pub mod error;
 pub mod implemented;
 pub mod lang;
+pub mod projects;
+pub mod requests;
 pub mod roles;
 pub mod routes;
 pub mod state;

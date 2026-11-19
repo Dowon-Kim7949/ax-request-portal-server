@@ -9,14 +9,15 @@ The reference backend for **[AX Request Portal](https://github.com/Dowon-Kim7949
 
 The two repositories meet at one contract. The frontend owns it: `src/api/contract.ts` generates `docs/openapi.json`, the frontend's mock API and its typed client. This server copies that document byte for byte from a pinned frontend commit and implements it. Neither side imports the other's code.
 
-> **Status: sign-in, people and teams.** Sign-in (`login`, `me`, `logout`, `completeSetup`), people and teams (`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`) work against PostgreSQL. The other 35 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
+> **Status: sign-in, people, teams and projects.** Sign-in (`login`, `me`, `logout`, `completeSetup`), people and teams (`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`) and projects (`listProjects`, `createProject`, `updateProject`) work against PostgreSQL. The other 32 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
 
 ## How the contract stays in step
 
 | Piece | What it does |
 | --- | --- |
 | `contract/openapi.json` | The frontend's contract at the commit in `contract/SOURCE`. Never edited here. |
-| `scripts/sync-contract.sh <ref>` | Copies the contract from a frontend branch, tag or commit and pins the demo's frontend build to the same commit. |
+| `contract/lifecycle.json` | The frontend's request lifecycle as data (statuses, transitions, who sends each event, guards by event, turns and stages), from the same commit. The server's port (`requests::lifecycle`) is tested against it. |
+| `scripts/sync-contract.sh <ref>` | Copies both documents from a frontend branch, tag or commit and pins the demo's frontend build to the same commit. |
 | CI `contract` job | Fails if the copy differs from the pinned commit. |
 | Tests | Every operation in the contract answers (`501` until implemented); the server's error codes and roles equal the contract's `ApiError.code` and `Role`. |
 

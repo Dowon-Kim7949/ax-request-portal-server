@@ -19,6 +19,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "listTeams",
     "createTeam",
     "updateTeam",
+    "listProjects",
+    "createProject",
+    "updateProject",
 ];
 
 #[cfg(test)]

@@ -80,7 +80,13 @@ impl Body {
         }
     }
 
-    fn issue(&mut self, path: &str, (ko, en): Text) {
+    /// The raw value of a field, for checks that go deeper than one level.
+    pub fn field(&self, key: &str) -> Option<&Value> {
+        self.fields.get(key)
+    }
+
+    /// Records a problem at `path` (e.g. `repository.url`, `targets.2.name`).
+    pub fn issue(&mut self, path: &str, (ko, en): Text) {
         self.issues.push(Issue { path: path.to_owned(), message: self.lang.pick(ko, en).to_owned() });
     }
 
@@ -92,6 +98,11 @@ impl Body {
     pub fn finish(self) -> Result<(), ApiError> {
         if self.issues.is_empty() { Ok(()) } else { Err(ApiError::check_input(self.lang, self.issues)) }
     }
+}
+
+/// The length of a string as JavaScript (and zod) counts it.
+pub fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
 }
 
 /// A string, trimmed, with at least one and at most `max` UTF-16 units after

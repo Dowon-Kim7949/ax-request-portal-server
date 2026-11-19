@@ -5,7 +5,7 @@ https://github.com/Dowon-Kim7949/ax-request-portal. Public, MIT, a portfolio pie
 
 ## Contract first
 
-- `contract/openapi.json` is a byte-for-byte copy of the frontend's `docs/openapi.json` at the commit in `contract/SOURCE`. Never edit it here. To change the API: change `src/api/contract.ts` in the frontend, merge there, then `bash scripts/sync-contract.sh main` here.
+- `contract/openapi.json` and `contract/lifecycle.json` are byte-for-byte copies of the frontend's `docs/openapi.json` and `docs/lifecycle.json` at the commit in `contract/SOURCE`; `requests::lifecycle` is tested against the latter. Never edit them here. To change the API: change `src/api/contract.ts` in the frontend, merge there, then `bash scripts/sync-contract.sh main` here.
 - Domain rules come from the frontend's `src/domain/` (lifecycle transitions and guards in `lifecycle.ts`, roles in `roles.ts`, AI usage normalisation in `ai.ts`) and from its `README.md` "Connect a real backend". Port them; match the mock API's behaviour (`src/mocks/engine.ts`).
 - Every contract operation is routed. Unimplemented ones answer `501`. When one gets a handler: add its `operationId` to `crates/api/src/implemented.rs` and an arm in `routes::implemented` (method and path come from the contract; building the router panics if the two lists disagree).
 - Schema changes are new files in `crates/api/migrations/` (never edit an applied one). Teams and users are never deleted; reference them with `ON DELETE RESTRICT`. AI usage rows copy the caller's `team_id` at call time.

@@ -34,8 +34,8 @@ curl -fsS "$API/healthz" | grep -q '"status":"ok"' || fail "/healthz is not ok"
 curl -fsS "$WEB/" | grep -q '<div id="root">' || fail "nginx does not serve the app"
 [[ "$(status "$WEB/mockServiceWorker.js")" == "404" ]] || fail "a real-backend build must not ship the mock service worker"
 
-[[ "$(status "$WEB/api/projects")" == "501" ]] || fail "/api/projects should reach the API (501 until implemented)"
-curl -s -H 'Accept-Language: en' "$WEB/api/projects" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
+[[ "$(status "$WEB/api/requests")" == "501" ]] || fail "/api/requests should reach the API (501 until implemented)"
+curl -s -H 'Accept-Language: en' "$WEB/api/requests" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
 [[ "$(status "$WEB/api/no-such-route")" == "404" ]] || fail "unknown API paths must be 404"
 
 # --- sign-in ---------------------------------------------------------------
@@ -81,6 +81,13 @@ member_id="$(json "$r" | field id)"
 call "$WEB/api/users" | grep -q "\"email\":\"$member\"" || fail "listUsers does not list the new person"
 call "$WEB/api/teams" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listTeams does not list the new team"
 
+# A project, owned by the admin.
+admin_id="$(field id <<<"$session")"
+project="{\"name\":\"Smoke $stamp\",\"description\":\"\",\"icon\":\"box\",\"repository\":{\"provider\":\"gitlab\",\"url\":\"https://git.example.com/smoke\"},\"wikiPath\":\"docs/llm-wiki\",\"ownerIds\":[\"$admin_id\"],\"targets\":[{\"name\":\"Home\"}],\"constraints\":[],\"active\":true}"
+r="$(call -X POST -d "$project" "$WEB/api/projects")"
+[[ "$(code "$r")" == "201" ]] || fail "createProject: $r"
+call "$WEB/api/projects" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listProjects does not list the new project"
+
 # The person sets a password through a one-time setup link, then signs in with it.
 r="$(call -X POST "$WEB/api/users/$member_id/setup-link")"
 [[ "$(code "$r")" == "201" ]] || fail "createSetupLink: $r"
@@ -103,4 +110,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project and a person, who set a password through a setup link; signed out)"
