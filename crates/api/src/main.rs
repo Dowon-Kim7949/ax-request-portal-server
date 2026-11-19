@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
+use ax_api::attachments::Files;
 use ax_api::cli::{Cli, Command};
 use ax_api::{AppState, Config, db, router};
 use clap::Parser;
@@ -73,6 +74,13 @@ async fn serve(config: Config) -> Result<(), BoxError> {
             return Err(format!("AX_TIME_ZONE is not a time zone PostgreSQL knows: {:?}", config.time_zone.0).into());
         }
     }
+    std::fs::create_dir_all(&config.upload_dir)
+        .map_err(|error| format!("AX_UPLOAD_DIR {:?} cannot be used: {error}", config.upload_dir))?;
+    let file_key = match &db {
+        Some(pool) => ax_api::attachments::signing_key(pool).await?,
+        None => ax_api::attachments::random_key(),
+    };
+    let files = Files::new(&config.upload_dir, &config.public_path, file_key);
     if let Some(pool) = &db {
         // The only provider so far (the configuration refuses any other).
         ax_api::ai::jobs::spawn(pool.clone(), ax_api::ai::StubProvider, config.ai.clone());
@@ -84,6 +92,7 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         setup_links: config.setup_links,
         time_zone: config.time_zone.clone(),
         ai: config.ai.clone(),
+        files,
     };
     let app = router(state, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

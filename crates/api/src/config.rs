@@ -11,6 +11,8 @@
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports and runs work (`stub` until one is wired)|
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
+//! | `AX_UPLOAD_DIR`   | `uploads`      | Where uploaded attachments are kept (created if missing)   |
+//! | `AX_PUBLIC_PATH`  | `/api`         | Where the browser reaches this server, for attachment links |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -18,6 +20,7 @@
 
 use std::fmt;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +33,12 @@ pub struct Config {
     pub setup_links: SetupLinkPolicy,
     pub time_zone: BusinessTimeZone,
     pub ai: AiSettings,
+    /// `AX_UPLOAD_DIR`: one file per attachment.
+    pub upload_dir: PathBuf,
+    /// `AX_PUBLIC_PATH`: the path the browser puts before this server's
+    /// routes (`/api` behind the frontend's nginx), without a trailing slash
+    /// (`/` stays `/`). Attachment links start with it.
+    pub public_path: String,
 }
 
 /// How the AI's jobs run.
@@ -177,7 +186,24 @@ impl Config {
         };
         let ai = AiSettings { provider, scope_check };
 
-        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links, time_zone, ai })
+        let upload_dir = PathBuf::from(non_empty("AX_UPLOAD_DIR").unwrap_or_else(|| "uploads".to_owned()));
+        let public_path = non_empty("AX_PUBLIC_PATH").unwrap_or_else(|| "/api".to_owned());
+        if !public_path.starts_with('/') || public_path.contains("//") {
+            return Err(ConfigError(format!("AX_PUBLIC_PATH must start with one '/', got {public_path:?}")));
+        }
+        let public_path = if public_path == "/" { public_path } else { public_path.trim_end_matches('/').to_owned() };
+
+        Ok(Self {
+            bind,
+            base_path,
+            database_url: non_empty("DATABASE_URL"),
+            sessions,
+            setup_links,
+            time_zone,
+            ai,
+            upload_dir,
+            public_path,
+        })
     }
 }
 
@@ -227,6 +253,18 @@ mod tests {
     #[test]
     fn base_path_loses_its_trailing_slash() {
         assert_eq!(config(&[("AX_BASE_PATH", "/api/")]).unwrap().base_path, "/api");
+    }
+
+    #[test]
+    fn uploads_and_their_links() {
+        let c = config(&[]).unwrap();
+        assert_eq!((c.upload_dir, c.public_path.as_str()), (PathBuf::from("uploads"), "/api"));
+        let c = config(&[("AX_UPLOAD_DIR", "/var/lib/ax/uploads"), ("AX_PUBLIC_PATH", "/portal/api/")]).unwrap();
+        assert_eq!((c.upload_dir, c.public_path.as_str()), (PathBuf::from("/var/lib/ax/uploads"), "/portal/api"));
+        assert_eq!(config(&[("AX_PUBLIC_PATH", "/")]).unwrap().public_path, "/");
+        for bad in ["api", "//api", "https://example.com/api"] {
+            assert!(config(&[("AX_PUBLIC_PATH", bad)]).is_err(), "{bad}");
+        }
     }
 
     #[test]

@@ -38,6 +38,11 @@ services:
       AX_TIME_ZONE: ${AX_TIME_ZONE:-Asia/Seoul}
       AX_AI_PROVIDER: ${AX_AI_PROVIDER:-stub}
       AX_SCOPE_CHECK: ${AX_SCOPE_CHECK:-true}
+      AX_PUBLIC_PATH: ${AX_PUBLIC_PATH:-/api}
+      # Inside the "uploads" volume below.
+      AX_UPLOAD_DIR: /var/lib/ax/uploads
+    volumes:
+      - uploads:/var/lib/ax/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -58,3 +63,4 @@ services:
 
 volumes:
   db-data:
+  uploads:

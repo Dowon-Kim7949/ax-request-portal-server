@@ -11,15 +11,22 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 use ax_api::accounts::{self, NewAccount};
+use ax_api::attachments::Files;
 use ax_api::roles::Role;
 use ax_api::users::User;
 use ax_api::{AppState, Config, router};
 
 pub const PASSWORD: &str = "correct horse battery staple";
 
+/// Where the tests keep uploads, and the key of their download links: the same
+/// for every call, as one server's would be.
+pub fn files() -> Files {
+    Files::new(std::env::temp_dir().join("ax-api-test-uploads"), "/api", [7; 32])
+}
+
 pub fn app(pool: &PgPool) -> Router {
     let config = Config::from_lookup(|_| None).unwrap();
-    router(AppState { db: Some(pool.clone()), ..AppState::default() }, &config)
+    router(AppState { db: Some(pool.clone()), files: files(), ..AppState::default() }, &config)
 }
 
 pub async fn send(
