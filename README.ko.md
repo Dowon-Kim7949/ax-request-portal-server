@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 계약의 operation 46개를 모두 구현했습니다.** 로그인, 사용자·팀, 프로젝트, 요청과 상태 전이, 첨부, 임시 저장, 알림, 대시보드와 배포 일정, 그리고 운영자의 AI 예산·모델 설정·가격·사용량 보고가 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돕니다. 실현 가능성 리포트는 Claude가 쓰고(`AX_AI_PROVIDER=anthropic`), 그렇지 않으면 스텁이 제공자가 연결되지 않았다고 알립니다. 다음은 코딩 에이전트로 하는 작업 실행입니다.
+> **현재 상태: 계약의 operation 46개를 모두 구현했습니다.** 로그인, 사용자·팀, 프로젝트, 요청과 상태 전이, 첨부, 임시 저장, 알림, 대시보드와 배포 일정, 그리고 운영자의 AI 예산·모델 설정·가격·사용량 보고가 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 서버 안에서 돌거나(Claude가 요청서만 보고 리포트를 쓰거나, 스텁이 제공자가 연결되지 않았다고 알림), 러너가 있으면 프로젝트의 GitHub 저장소 클론에서 Claude Code로 돕니다. 러너가 쓰는 리포트는 코드와 위키를 근거로 하고, 작업은 pull request로 끝납니다.
 
 ## 계약을 맞추는 방법
 
@@ -119,7 +119,21 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 요청과 프로젝트의 설명·화면·규칙만 읽고, 코드와 위키는 읽지 않습니다. 그래서 읽지 않은 것은 주장하지 않습니다. 프런트엔드 목처럼 근거 없는 리포트는 `undetermined`(`non_code` 요청은 `out_of_scope`)이고, 계획은 비어 있으며 위키 신뢰도는 `low`입니다.
   - Claude가 더하는 내용은 판단하는 개발자를 위한 것입니다. 완료 기준마다 확인할 방법, 요청자에게 물을 것, 코드에서 확인할 가정, 요청이 어길 수 있는 프로젝트 규칙, 함께 다시 확인할 화면, 규모, 위험을 씁니다. 서버는 완료 기준과 규칙을 요청과 프로젝트의 순서대로 두고, 프로젝트에 없는 화면은 뺍니다.
   - 호출마다 그 작업을 시작한 사람(첫 리포트는 요청자)에게 `ai_usage`로 기록하고, 작업이 실패해도 기록합니다. 거절, 거부된 요청(`4xx`), 토큰 소진은 바로 실패로 끝내고, 장애와 rate limit은 다시 시도합니다.
-  - 작업 실행에는 저장소를 다루는 코딩 에이전트가 필요합니다. 연결되기 전까지는 그렇다고 알리고 코드를 바꾸지 않습니다.
+  - 작업 실행에는 러너(아래)가 필요합니다. 러너가 없으면 그렇다고 알리고 코드를 바꾸지 않습니다.
+- **러너**(`ax-api runner`, `ax-runner` 서비스, `--profile runner`)는 프로젝트의 GitHub 저장소를 새로 클론하고, 두 작업을 모두 Claude Code로 처리합니다. Claude Code는 `claude -p`, `--bare`로 돌고, 답은 JSON 스키마로 받으며, 요청의 남은 AI 예산을 넘지 않습니다.
+  - `AX_RUNNER_TOKEN`을 설정하면 서버는 AI 작업을 직접 돌리지 않습니다. 러너는 계약 밖 경로 세 개(`/runner/claim`, `/runner/jobs/{id}/heartbeat`, `/runner/jobs/{id}/result`)로 작업을 가져가며, 이 토큰과 작업마다 받는 claim이 필요합니다.
+  - claim은 10분짜리이고, 에이전트가 일하는 동안 갱신합니다. 러너가 응답하지 않으면 그 작업은 다음 시도로 대기열에 돌아가고, 지난 claim으로 늦게 온 답은 거절합니다.
+  - 러너는 데이터베이스에 접근하지 않고, 에이전트는 git 토큰을 갖지 않습니다.
+  - **리포트**: 에이전트는 코드와 위키를 읽기만 합니다(수정과 셸 금지). 러너는 실제로 있는 위키 문서와 파일만 남기고, 문서마다 front matter에서 검토 상태를 읽습니다. 리포트가 무엇을 주장할 수 있는지는 서버가 프런트엔드 규칙대로 정합니다.
+    - 위키 근거가 없으면 `undetermined`입니다.
+    - 위키 신뢰도는 문서들의 검토 상태로 정합니다. 모두 검토됐으면 `high`, 절반 이상이면 `medium`, 그 밖에는 `low`입니다.
+    - 열린 질문이 있거나 신뢰도가 낮거나 규칙과 충돌하면 많아야 `conditional`입니다.
+    - `feasible`나 `conditional` 리포트에는 요청자가 확인할 범위 제안이 함께 붙습니다.
+  - **작업**: 러너는 작업 브랜치 `ax/request-<id>`를 쓰고, 다음 실행은 이 브랜치를 이어 씁니다. 에이전트는 클론에서 코드를 고치고 테스트를 돌립니다(네트워크 도구 금지). 러너가 커밋과 push를 하고 pull request를 열거나, 열려 있는 것을 다시 씁니다.
+    - PR 크기, 테스트 수, 고친 위키 문서를 작업 실행에 기록합니다(`mergeRequest`, `tests`, `pendingReview`가 붙은 `wikiChanges`). 리포트가 다시 확인하라고 한 화면마다 대기 중인 회귀 확인을 추가합니다.
+    - 머지는 하지 않습니다. 개발자가 포털에서 승인하고 GitHub에서 머지하며, 토큰에도 머지 권한을 주지 않는 게 좋습니다.
+    - 에이전트가 고친 위키 문서는 `status: verified`로 남지 않습니다. 러너가 `needs_review`로 되돌립니다.
+  - 비용은 Claude Code가 보고하는 추정치(`total_cost_usd`, 모델별 내역이 있으면 모델별)이고, 그 작업을 시작한 사람에게 기록합니다.
 - **대시보드와 배포 일정.**
   - `dashboard`(`dashboard:view`)는 한 달 동안 접수된 요청과 반영된 요청을 셉니다.
     - 대상 달을 지정하지 않으면 이번 달입니다.
@@ -172,6 +186,13 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_LOGIN_LOCKOUT` | `15m` | 실패를 세는 기간이자 거절이 이어지는 시간 |
 | `AX_ANTHROPIC_API_KEY` | 없음 | 모든 AI 작업에 쓰는 Claude Platform 키. API로는 절대 돌려주지 않고, 콘솔에는 마지막 네 글자만 보입니다. |
 | `AX_ANTHROPIC_API_KEY_PRECHECK`, `AX_ANTHROPIC_API_KEY_REPORT`, `AX_ANTHROPIC_API_KEY_WORK` | 없음 | 한 작업에만 쓰는 키. 그 작업에는 `AX_ANTHROPIC_API_KEY` 대신 이 키를 씁니다. |
+| `AX_RUNNER_TOKEN` | 없음 | 설정하면 AI 작업을 서버가 돌리지 않고 러너(`ax-api runner`)를 기다립니다. 32자 이상이고, 서버와 러너에 같은 값을 둡니다 |
+| `AX_RUNNER_SERVER` | (러너) | 러너가 API에 닿는 주소. Compose에서는 `http://ax-backend:8080` |
+| `AX_GITHUB_TOKEN` | (러너) | 작업 브랜치를 push하고 pull request를 여는 토큰. Contents와 Pull requests 쓰기 권한만 주고, 기본 브랜치는 보호합니다 |
+| `AX_GITHUB_API` | `https://api.github.com` | (러너) GitHub REST API. GitHub Enterprise는 `https://HOST/api/v3` |
+| `AX_RUNNER_TIMEOUT` | `30m` | (러너) 에이전트 실행 한 번에 허용하는 시간 |
+| `AX_RUNNER_WORKDIR` | 임시 디렉터리 | (러너) 클론을 두는 곳. 작업마다 디렉터리 하나를 쓰고 끝나면 지웁니다 |
+| `AX_CLAUDE_BIN` | `claude` | (러너) Claude Code 명령 |
 | `AX_AI_PROVIDER` | `stub` | 리포트를 쓰는 제공자: `stub`, 또는 `anthropic`(Claude, 키 필요). 작업 실행은 어느 쪽이든 코딩 에이전트를 기다립니다. |
 | `AX_SCOPE_CHECK` | `true` | 구현 가능 또는 조건부 리포트가 나오면, 개발자 검토 전에 요청자가 AI가 이해한 범위를 확인합니다. 프런트엔드의 `appConfig.workflow.scopeCheck`와 같은 값으로 둡니다. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |

@@ -31,6 +31,11 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> Result<(), BoxError> {
+    if let Some(Command::Runner) = cli.command {
+        let config = ax_api::config::RunnerConfig::from_env()?;
+        ax_api::runner::Runner::new(config).run().await;
+        return Ok(());
+    }
     let config = Config::from_env()?;
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(config).await,
@@ -39,6 +44,7 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
             println!("migrations applied");
             Ok(())
         }
+        Command::Runner => unreachable!("handled above"),
         Command::User(command) => {
             let pool = connect(&config)?;
             db::migrate(&pool).await?;
@@ -81,7 +87,9 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         None => ax_api::attachments::random_key(),
     };
     let files = Files::new(&config.upload_dir, &config.public_path, file_key);
-    if let Some(pool) = &db {
+    if let (Some(_), Some(_)) = (&db, &config.ai.runner_token) {
+        tracing::info!("AI jobs wait for a runner (AX_RUNNER_TOKEN is set)");
+    } else if let Some(pool) = &db {
         // The configuration allows only these two.
         if config.ai.provider == "anthropic" {
             let claude = ax_api::ai::claude::ClaudeProvider::new(config.ai.anthropic.clone());

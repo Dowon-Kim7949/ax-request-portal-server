@@ -9,7 +9,7 @@ The reference backend for **[AX Request Portal](https://github.com/Dowon-Kim7949
 
 The two repositories meet at one contract. The frontend owns it: `src/api/contract.ts` generates `docs/openapi.json`, the frontend's mock API and its typed client. This server copies that document byte for byte from a pinned frontend commit and implements it. Neither side imports the other's code.
 
-> **Status: every contract operation is implemented (46 of 46)** against PostgreSQL: sign-in, people and teams, projects, requests and their lifecycle, attachments, saved drafts, notifications, the dashboard and the release schedule, and the operator's AI budget, model settings, prices and usage report. The AI's two jobs run in a background worker: Claude writes the feasibility report (`AX_AI_PROVIDER=anthropic`), or a stub says no provider is connected. Next: work runs with a coding agent.
+> **Status: every contract operation is implemented (46 of 46)** against PostgreSQL: sign-in, people and teams, projects, requests and their lifecycle, attachments, saved drafts, notifications, the dashboard and the release schedule, and the operator's AI budget, model settings, prices and usage report. The AI's two jobs run either in the server (Claude writes the report from the request alone, or a stub says no provider is connected) or, with a runner, as Claude Code on a clone of the project's GitHub repository: a report backed by its code and wiki, and work that ends in a pull request.
 
 ## How the contract stays in step
 
@@ -101,7 +101,11 @@ Passwords are never command-line arguments: the CLI prompts for them, or reads t
 - **Claude** (`AX_AI_PROVIDER=anthropic`) writes the report with one Messages API call (`POST /v1/messages`, over HTTP: there is no official Rust SDK), with the model the AI settings choose for the project (Opus by default), effort `high`, structured output (`output_config.format`), the instructions cached, and server-side fallback on a safety decline where the model takes it (not Haiku).
   - It reads the request and its project's description, screens and rules, not the code or the wiki. So it claims nothing it did not read: as in the frontend's mock, a report without evidence is `undetermined` (a `non_code` request is `out_of_scope`), its plan is empty and its wiki trust `low`. What Claude adds is for the developer who decides: how each criterion would be checked, what to ask the requester, what to confirm in the code, which project rules the request could break, which other screens to re-check, a size and the risks. The server keeps criteria and rules in the request's and project's order and drops screens the project does not have.
   - Every call is booked in `ai_usage` against the person whose step started the job (the requester for the first report), even when the job fails. A refusal, a rejected request (`4xx`) or running out of tokens fails the job at once; an outage or a rate limit is retried.
-  - Work runs need a coding agent with the repository; until one is connected, a run says so and changes nothing.
+  - Work runs need the runner (below); without it, a run says so and changes nothing.
+- **The runner** (`ax-api runner`, the `ax-runner` service, `--profile runner`) runs both jobs as Claude Code (`claude -p`, `--bare`, a JSON schema for the answer, capped by the request's remaining AI budget) on a fresh clone of the project's GitHub repository. With `AX_RUNNER_TOKEN` set the server runs no AI jobs itself; the runner takes them over three routes outside the contract (`/runner/claim`, `/runner/jobs/{id}/heartbeat`, `/runner/jobs/{id}/result`), with that token and a per-job claim. A claim lasts 10 minutes and is renewed while the agent works; a silent runner's job goes back to the pool as another attempt, and a late answer under an old claim is refused. The runner has no database access, and the agent never holds the git token.
+  - **Report**: the agent reads the code and the wiki (no edits, no shell). The runner keeps the wiki pages and files that exist and reads each page's review state from its front matter. The server decides what the report may claim, under the frontend's rules: no wiki evidence is `undetermined`, wiki trust comes from the pages' review state (all reviewed `high`, at least half `medium`, else `low`), and open questions, low trust or a rule conflict make it at most `conditional`. A `feasible` or `conditional` report carries the scope proposal the requester confirms.
+  - **Work**: the run's branch `ax/request-<id>` (later runs continue it), the agent edits and runs the tests in the clone (no network tools), the runner commits, pushes and opens the pull request, or reuses the open one. Its size, the test counts and the wiki pages it edited go to the run (`mergeRequest`, `tests`, `wikiChanges` with `pendingReview`), and a pending regression check is added per screen the report said to re-check. Nothing merges: a developer approves in the portal and merges on GitHub, and the token should not be able to merge. A wiki page the agent edited is never left `status: verified`; the runner sets it back to `needs_review`.
+  - Claude Code's own cost estimate (`total_cost_usd`, per model when it reports one) is booked against the person whose step started the job.
 - **Dashboard and schedule.** `dashboard` (`dashboard:view`) counts what was filed and went live in a month (this month by default, compared with the same days of the month before while it runs), the average lead time, open and late work, this week's planned releases and what needs attention; `releases` (`schedule:view`) is the company-wide schedule, each request on the day it went live or else its planned day, and says per request whether the viewer may open it. Every day and month is on the business calendar (`AX_TIME_ZONE`). The AI cost fields are the month's booked AI spending against the monthly limit.
 - Requests keep what lists filter on in columns and the rest of the contract's `WorkRequest` as one JSONB object; the timeline is its own append-only table. Numbers start at 1.
 - **Attachments.** `uploadAttachment` (`request:create`) takes the multipart field `file`, up to 10 MB (`400` without a file or above the limit, checked before the permission as in the mock API), and keeps it in `AX_UPLOAD_DIR` under a random id. Only the uploader may put it on a request; a request keeps each attachment once, in the order given.
@@ -140,6 +144,13 @@ With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy
 | `AX_LOGIN_LOCKOUT` | `15m` | The window failed sign-ins are counted in, and how long the refusal lasts |
 | `AX_ANTHROPIC_API_KEY` | unset | Claude Platform key for every AI task. Never returned by the API; the console shows its last four characters. |
 | `AX_ANTHROPIC_API_KEY_PRECHECK`, `AX_ANTHROPIC_API_KEY_REPORT`, `AX_ANTHROPIC_API_KEY_WORK` | unset | A key for one task, used instead of `AX_ANTHROPIC_API_KEY` for it |
+| `AX_RUNNER_TOKEN` | unset | Set, the AI jobs wait for a runner (`ax-api runner`) instead of running in the server; at least 32 characters, the same on both |
+| `AX_RUNNER_SERVER` | (runner) | The API as the runner reaches it; Compose: `http://ax-backend:8080` |
+| `AX_GITHUB_TOKEN` | (runner) | Pushes the run's branch and opens its pull request. Contents and Pull requests write only; protect the default branch. |
+| `AX_GITHUB_API` | `https://api.github.com` | (runner) GitHub's REST API; GitHub Enterprise: `https://HOST/api/v3` |
+| `AX_RUNNER_TIMEOUT` | `30m` | (runner) How long one agent run may take |
+| `AX_RUNNER_WORKDIR` | temp dir | (runner) Where clones go, one directory per job, removed after |
+| `AX_CLAUDE_BIN` | `claude` | (runner) The Claude Code command |
 | `AX_AI_PROVIDER` | `stub` | Who writes reports: `stub`, or `anthropic` (Claude; needs a key). Work runs wait for a coding agent either way. |
 | `AX_SCOPE_CHECK` | `true` | After a feasible or conditional report the requester confirms the AI's reading before review. Keep it equal to the frontend's `appConfig.workflow.scopeCheck`. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | The business calendar (IANA name): "today" for desired and release dates, delays and monthly totals. Keep it equal to the frontend's `appConfig.organization.timeZone`; the server refuses to start with a name PostgreSQL does not know. |
@@ -158,7 +169,8 @@ crates/api        the HTTP server (axum): routing, ApiError, Accept-Language, pr
                   sign-in, roles, people and teams, the ax-api CLI;
                   migrations/ holds the SQL schema
 contract/         openapi.json + SOURCE (pinned frontend commit)
-deploy/           Dockerfiles, compose.yaml (db, ax-backend, web) and .env.example
+deploy/           Dockerfiles, compose.yaml (db, ax-backend, web, and ax-runner under
+                  --profile runner) and .env.example
 scripts/          cargo.sh, sync-contract.sh, smoke.sh
 ```
 

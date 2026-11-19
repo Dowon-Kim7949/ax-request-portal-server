@@ -13,6 +13,7 @@
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports: `stub`, or `anthropic` (Claude)        |
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
+//! | `AX_RUNNER_TOKEN` | unset          | Lets a runner (`ax-api runner`) take the AI jobs (see below) |
 //! | `AX_ANTHROPIC_API_KEY` | unset     | Claude Platform key for every AI task (see below)          |
 //! | `AX_ANTHROPIC_API_KEY_PRECHECK`, `_REPORT`, `_WORK` | unset | A key for one task, used before the one above |
 //! | `AX_DRAFTS_PER_ACCOUNT` | `20`     | How many saved drafts one person may keep                  |
@@ -67,11 +68,14 @@ pub struct AiSettings {
     pub scope_check: bool,
     /// Anthropic (Claude Platform) keys.
     pub anthropic: TaskKeys,
+    /// `AX_RUNNER_TOKEN`: when set, a runner takes the report and work jobs
+    /// over HTTP (`ai::runner`) and the server runs none itself.
+    pub runner_token: Option<Secret>,
 }
 
 impl Default for AiSettings {
     fn default() -> Self {
-        Self { provider: "stub".to_owned(), scope_check: true, anthropic: TaskKeys::default() }
+        Self { provider: "stub".to_owned(), scope_check: true, anthropic: TaskKeys::default(), runner_token: None }
     }
 }
 
@@ -229,6 +233,95 @@ fn parse_duration(value: &str) -> Option<Duration> {
     (seconds > 0).then(|| Duration::from_secs(seconds))
 }
 
+/// The runner's settings (`ax-api runner`): where the server is, how to reach
+/// GitHub and Claude, where to work.
+///
+/// | Variable | Default | Meaning |
+/// | --- | --- | --- |
+/// | `AX_RUNNER_SERVER` | required | The API as the runner reaches it, e.g. `http://ax-backend:8080` |
+/// | `AX_RUNNER_TOKEN` | required | The same token as the server's |
+/// | `AX_GITHUB_TOKEN` | required | Pushes the run's branch and opens its pull request; give it no right to merge |
+/// | `AX_GITHUB_API` | `https://api.github.com` | GitHub's REST API (GitHub Enterprise: `https://HOST/api/v3`) |
+/// | `AX_ANTHROPIC_API_KEY` (and `_REPORT`, `_WORK`) | required | Claude keys, as on the server |
+/// | `AX_RUNNER_WORKDIR` | temp dir | Where repositories are cloned, one directory per job |
+/// | `AX_RUNNER_TIMEOUT` | `30m` | How long one agent run may take |
+/// | `AX_CLAUDE_BIN` | `claude` | The Claude Code command |
+#[derive(Debug, Clone)]
+pub struct RunnerConfig {
+    pub server: String,
+    pub token: Secret,
+    pub github_token: Secret,
+    pub github_api: String,
+    pub anthropic: TaskKeys,
+    pub workdir: PathBuf,
+    pub timeout: Duration,
+    pub claude: String,
+    /// Extra `git -c` settings for every git command (tests point GitHub at
+    /// a local repository with `url.<path>.insteadOf`).
+    pub git_config: Vec<(String, String)>,
+    /// How often to ask for work when there is none, and to renew a claim.
+    pub poll: Duration,
+    pub heartbeat: Duration,
+}
+
+impl RunnerConfig {
+    /// Reads the process environment.
+    ///
+    /// # Errors
+    ///
+    /// A missing or malformed variable, by name.
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_lookup(|name| std::env::var(name).ok())
+    }
+
+    /// # Errors
+    ///
+    /// A missing or malformed variable, by name.
+    pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let non_empty = |name: &str| get(name).map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+        let required = |name: &str| non_empty(name).ok_or_else(|| ConfigError(format!("{name} is required")));
+        let server = required("AX_RUNNER_SERVER")?.trim_end_matches('/').to_owned();
+        if !(server.starts_with("http://") || server.starts_with("https://")) {
+            return Err(ConfigError(format!("AX_RUNNER_SERVER must be an http(s) URL, got {server:?}")));
+        }
+        let anthropic = TaskKeys {
+            default: non_empty("AX_ANTHROPIC_API_KEY").map(Secret),
+            precheck: non_empty("AX_ANTHROPIC_API_KEY_PRECHECK").map(Secret),
+            report: non_empty("AX_ANTHROPIC_API_KEY_REPORT").map(Secret),
+            work: non_empty("AX_ANTHROPIC_API_KEY_WORK").map(Secret),
+        };
+        if anthropic.for_task("report").is_none() || anthropic.for_task("work").is_none() {
+            return Err(ConfigError(
+                "the runner needs a Claude key for report and work (AX_ANTHROPIC_API_KEY, or _REPORT and _WORK)"
+                    .to_owned(),
+            ));
+        }
+        let timeout = match non_empty("AX_RUNNER_TIMEOUT") {
+            None => Duration::from_secs(30 * MINUTE),
+            Some(value) => parse_duration(&value).ok_or_else(|| {
+                ConfigError(format!("AX_RUNNER_TIMEOUT must be a duration such as 30m, got {value:?}"))
+            })?,
+        };
+        Ok(Self {
+            server,
+            token: Secret(required("AX_RUNNER_TOKEN")?),
+            github_token: Secret(required("AX_GITHUB_TOKEN")?),
+            github_api: non_empty("AX_GITHUB_API")
+                .unwrap_or_else(|| "https://api.github.com".to_owned())
+                .trim_end_matches('/')
+                .to_owned(),
+            anthropic,
+            workdir: non_empty("AX_RUNNER_WORKDIR")
+                .map_or_else(|| std::env::temp_dir().join("ax-runner"), PathBuf::from),
+            timeout,
+            claude: non_empty("AX_CLAUDE_BIN").unwrap_or_else(|| "claude".to_owned()),
+            git_config: Vec::new(),
+            poll: Duration::from_secs(5),
+            heartbeat: Duration::from_secs(60),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigError(String);
 
@@ -314,7 +407,11 @@ impl Config {
                 "AX_AI_PROVIDER=anthropic needs AX_ANTHROPIC_API_KEY (or a key per task)".to_owned(),
             ));
         }
-        let ai = AiSettings { provider, scope_check, anthropic };
+        let runner_token = secret("AX_RUNNER_TOKEN");
+        if runner_token.as_ref().is_some_and(|t| t.expose().len() < 32) {
+            return Err(ConfigError("AX_RUNNER_TOKEN must be at least 32 characters".to_owned()));
+        }
+        let ai = AiSettings { provider, scope_check, anthropic, runner_token };
 
         let drafts = match non_empty("AX_DRAFTS_PER_ACCOUNT") {
             None => DraftPolicy::default(),
@@ -427,6 +524,41 @@ mod tests {
         for (name, bad) in [("AX_LOGIN_ATTEMPTS", "0"), ("AX_LOGIN_ATTEMPTS", "lots"), ("AX_LOGIN_LOCKOUT", "soon")] {
             assert!(config(&[(name, bad)]).is_err(), "{name}={bad}");
         }
+    }
+
+    #[test]
+    fn a_runner_token_is_long() {
+        assert!(config(&[("AX_RUNNER_TOKEN", "short")]).is_err());
+        let token = "r".repeat(32);
+        assert_eq!(config(&[("AX_RUNNER_TOKEN", &token)]).unwrap().ai.runner_token, Some(Secret::new(token.clone())));
+        assert!(!format!("{:?}", config(&[("AX_RUNNER_TOKEN", &token)]).unwrap()).contains(&token));
+    }
+
+    #[test]
+    fn runner_settings() {
+        let vars = |extra: &[(&'static str, &'static str)]| {
+            let mut all: HashMap<String, String> = [
+                ("AX_RUNNER_SERVER", "http://ax-backend:8080/"),
+                ("AX_RUNNER_TOKEN", "t"),
+                ("AX_GITHUB_TOKEN", "ghp_x"),
+                ("AX_ANTHROPIC_API_KEY", "k"),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect();
+            for (k, v) in extra {
+                all.insert((*k).to_owned(), (*v).to_owned());
+            }
+            RunnerConfig::from_lookup(move |name| all.get(name).cloned())
+        };
+        let c = vars(&[]).unwrap();
+        assert_eq!((c.server.as_str(), c.github_api.as_str()), ("http://ax-backend:8080", "https://api.github.com"));
+        assert_eq!((c.timeout, c.claude.as_str()), (Duration::from_secs(1800), "claude"));
+        assert!(!format!("{c:?}").contains("ghp_x"));
+        assert!(vars(&[("AX_RUNNER_SERVER", "ax-backend")]).is_err());
+        assert!(vars(&[("AX_ANTHROPIC_API_KEY", "")]).is_err(), "no Claude key");
+        assert!(vars(&[("AX_GITHUB_TOKEN", " ")]).is_err());
+        assert!(vars(&[("AX_RUNNER_TIMEOUT", "soon")]).is_err());
     }
 
     #[test]

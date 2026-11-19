@@ -4,15 +4,17 @@
 //! To implement an operation: add its `operationId` to
 //! [`IMPLEMENTED`](crate::implemented::IMPLEMENTED) and an arm to [`implemented`].
 //!
-//! One route is not in the contract: `GET /files/{id}`, the signed download
-//! link that every `Attachment.url` points at (see [`crate::attachments`]).
+//! A few routes are not in the contract: `GET /files/{id}`, the signed
+//! download link that every `Attachment.url` points at (see
+//! [`crate::attachments`]), and the runner's `/runner/...` (see
+//! [`crate::ai::runner`]), which answer `404` unless `AX_RUNNER_TOKEN` is set.
 
 use std::collections::BTreeMap;
 
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{MethodFilter, MethodRouter, get};
+use axum::routing::{MethodFilter, MethodRouter, get, post};
 use axum::{Json, Router};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
@@ -30,7 +32,12 @@ use crate::{dashboard, drafts, notifications, projects, requests, teams, users};
 /// `/healthz` and `/readyz` sit at the root whatever `base_path` is, so probes
 /// do not depend on how the proxy maps the API.
 pub fn router(state: AppState, config: &Config) -> Router {
-    let api = contract_routes().route("/files/{id}", get(attachments::handlers::download)).fallback(not_found);
+    let api = contract_routes()
+        .route("/files/{id}", get(attachments::handlers::download))
+        .route("/runner/claim", post(ai::runner::claim))
+        .route("/runner/jobs/{id}/heartbeat", post(ai::runner::heartbeat))
+        .route("/runner/jobs/{id}/result", post(ai::runner::result))
+        .fallback(not_found);
     let probes = Router::new().route("/healthz", get(healthz)).route("/readyz", get(readyz));
     let app = if config.base_path == "/" {
         probes.merge(api)
