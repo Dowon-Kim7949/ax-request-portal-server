@@ -348,6 +348,11 @@ pub async fn list(
 
 /// `POST /requests/precheck` (`request:create`): advice on a draft before it
 /// is filed, in the request's language. Never blocks anything.
+///
+/// The rules always answer. With Claude connected and the precheck's model
+/// (per project) an Anthropic one, Claude's advice follows for fields the
+/// rules said nothing about; the call is booked against the caller, and a
+/// failure or a slow answer leaves the rules alone.
 pub async fn precheck(
     State(state): State<AppState>,
     lang: Lang,
@@ -358,7 +363,38 @@ pub async fn precheck(
     auth::require(&current.user, Permission::RequestCreate, lang)?;
     let db = state.db(lang)?;
     let today = store::today(db, &state.time_zone.0).await.map_err(ApiError::db(lang))?;
-    Ok(Json(json!({ "issues": precheck::advise(&draft, &today, lang) })))
+    let mut issues = precheck::advise(&draft, &today, lang);
+    if let Some(claude) = &state.claude {
+        let mut conn = db.acquire().await.map_err(ApiError::db(lang))?;
+        let selection = settings::selections(&mut conn)
+            .await
+            .map_err(ApiError::db(lang))?
+            .resolve(&draft.project_id, "precheck")
+            .clone();
+        if selection.provider == "anthropic" {
+            let project = Project::find(&mut *conn, &draft.project_id).await.map_err(ApiError::db(lang))?;
+            let (advice, spend) = claude.precheck(&draft, project.as_ref(), &selection.model, lang).await;
+            for s in spend {
+                let ran = settings::Selection { provider: selection.provider.clone(), model: s.model };
+                let call = usage::Call {
+                    task: "precheck",
+                    selection: &ran,
+                    request_id: None,
+                    user_id: current.user.id,
+                    tokens: s.tokens,
+                };
+                usage::book(&mut conn, &state.time_zone.0, &call).await.map_err(ApiError::db(lang))?;
+            }
+            match advice {
+                Ok(advice) => {
+                    let flagged: Vec<String> = issues.iter().map(|i| i.field.clone()).collect();
+                    issues.extend(advice.into_iter().filter(|a| !flagged.contains(&a.field)));
+                }
+                Err(failure) => tracing::warn!(error = %failure.message, "AI precheck failed; the rules answer alone"),
+            }
+        }
+    }
+    Ok(Json(json!({ "issues": issues })))
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ use ax_api::ai::claude::ClaudeProvider;
 use ax_api::ai::jobs::run_pending;
 use ax_api::config::{AiSettings, Secret, TaskKeys};
 use ax_api::roles::Role;
+use ax_api::{AppState, Config, router};
 use common::*;
 
 type Seen = Arc<Mutex<Vec<(HeaderMap, Value)>>>;
@@ -41,7 +42,11 @@ async fn fake_api(replies: Vec<(u16, Value)>) -> (ClaudeProvider, Seen) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let keys = TaskKeys { report: Some(Secret::new("sk-report-key-1234")), ..TaskKeys::default() };
+    let keys = TaskKeys {
+        report: Some(Secret::new("sk-report-key-1234")),
+        precheck: Some(Secret::new("sk-precheck-key-5678")),
+        ..TaskKeys::default()
+    };
     (ClaudeProvider::with_base_url(keys, &url), fake.seen)
 }
 
@@ -235,4 +240,67 @@ async fn haiku_takes_no_fallback_and_a_non_code_request_is_out_of_scope(pool: Pg
     assert_eq!(report["verdict"], "out_of_scope");
     assert_eq!((&report["assumptions"], &report["constraintChecks"]), (&json!([]), &json!([])));
     assert_eq!(report["size"], "M", "an unknown size falls back to M");
+}
+
+/// The app with Claude connected for the precheck.
+fn with_claude(pool: &PgPool, claude: ClaudeProvider) -> Router {
+    let config = Config::from_lookup(|_| None).unwrap();
+    router(AppState { db: Some(pool.clone()), files: files(), claude: Some(claude), ..AppState::default() }, &config)
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn the_precheck_adds_claudes_advice_to_the_rules(pool: PgPool) {
+    let w = world(&pool, "change").await;
+    let token = token_for(&pool, "req@example.com").await;
+    let (_, project) = send(&pool, "GET", "/projects", Some(&token), "en", None).await;
+    let draft = json!({
+        "projectId": project[0]["id"], "type": "change", "title": "Search", "targetIds": [],
+        "currentBehavior": "Notices are hard to find", "desiredBehavior": "Make the list nicer",
+        "acceptanceCriteria": [{ "text": "When I type a word, matching notices show" }, { "text": "Better search" }],
+        "attachmentIds": [],
+    });
+    let (status, rules) = send(&pool, "POST", "/requests/precheck", Some(&token), "en", Some(draft.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    let rules = rules["issues"].as_array().unwrap().clone();
+    assert!(rules.iter().any(|i| i["field"] == "desiredBehavior"), "the rules flag the vague word: {rules:?}");
+
+    let advice = json!({ "issues": [
+        { "field": "desiredBehavior", "severity": "warning", "message": "Already flagged by the rules" },
+        { "field": "title", "severity": "info", "message": "Say which list is searched" },
+        { "field": "acceptanceCriteria.7", "severity": "warning", "message": "No such criterion" },
+        { "field": "currentBehavior", "severity": "warning", "message": "Say where you looked for the notice" },
+    ]});
+    let (claude, seen) = fake_api(vec![(200, answered("claude-haiku-5-5", &advice))]).await;
+    let (status, checked) = send_to(
+        with_claude(&pool, claude.clone()),
+        "POST",
+        "/requests/precheck",
+        Some(&token),
+        "en",
+        Some(draft.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut expected = rules.clone();
+    expected.push(json!({ "field": "title", "severity": "info", "message": "Say which list is searched" }));
+    expected.push(
+        json!({ "field": "currentBehavior", "severity": "warning", "message": "Say where you looked for the notice" }),
+    );
+    assert_eq!(checked["issues"], Value::Array(expected), "rules first; Claude only where they said nothing");
+
+    let (headers, body) = seen.lock().unwrap()[0].clone();
+    assert_eq!(headers["x-api-key"], "sk-precheck-key-5678");
+    assert_eq!((&body["model"], &body["output_config"]["effort"]), (&json!("claude-haiku-5-5"), &json!("low")));
+    assert!(body.get("fallbacks").is_none(), "Haiku takes no fallback");
+    assert!(body["messages"][0]["content"].as_str().unwrap().starts_with("Write every message in English."));
+    let (task, request, user): (String, Option<i64>, String) =
+        sqlx::query_as("select task, request_id, user_id::text from ai_usage").fetch_one(&pool).await.unwrap();
+    assert_eq!((task.as_str(), request, user), ("precheck", None, w.requester_id), "booked against the caller");
+
+    // When Claude fails, the rules answer alone.
+    let down = json!({ "type": "error", "error": { "type": "overloaded_error", "message": "Overloaded" } });
+    let (claude, _) = fake_api(vec![(529, down)]).await;
+    let (status, checked) =
+        send_to(with_claude(&pool, claude), "POST", "/requests/precheck", Some(&token), "en", Some(draft)).await;
+    assert_eq!((status, checked["issues"].clone()), (StatusCode::OK, Value::Array(rules)));
 }
