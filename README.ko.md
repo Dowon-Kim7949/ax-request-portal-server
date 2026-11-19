@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`)가 PostgreSQL과 함께 동작합니다. 나머지 operation 32개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 28개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
 
 ## 계약을 맞추는 방법
 
@@ -86,6 +86,14 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 운영자(`403`, 대신 `ax-api user set-password`를 씁니다)와 비활성 사용자(`400`)에게는 링크를 만들 수 없습니다. 사용자를 비활성화하면 아직 쓰지 않은 링크도 함께 지웁니다. 없는 링크, 이미 쓴 링크, 만료된 링크는 로그인 실패처럼 `401`입니다.
   - 토큰은 세션 토큰처럼 SHA-256 해시만 저장합니다. 브라우저는 URL 프래그먼트를 서버로 보내지 않으므로 서버 로그에도 남지 않습니다.
 
+## 요청
+
+- `createRequest`(`request:create`)는 요청을 접수합니다. 요청은 `submitted`로 시작해 바로 `reporting`(`startReport`)으로 넘어가고, 이 단계에서 AI가 실현 가능성 리포트를 씁니다. 담당자는 프로젝트의 첫 번째 담당자입니다. 없거나 비활성인 프로젝트, 프로젝트에 없는 대상, 본인 것이 아닌 첨부는 `400`입니다.
+- 사전 점검(`precheckRequest`, 새 요청에도 저장)은 프런트엔드 `precheck.ts`의 규칙을 그대로 옮겼습니다. 모호한 표현, "~하면 ~된다" 형식이 아닌 완료 기준, 빠진 재현 순서, 지난 날짜를 짚습니다. 접수를 막지 않으며 요청의 언어로 답합니다.
+- 요청을 열 수 있는 사람은 요청한 본인, `request:read:all` 권한이 있는 사람, 그 요청의 담당 개발자(담당자와 프로젝트 담당자)입니다. 그 밖의 사람에게는 없는 요청과 똑같이 `404`를 돌려줍니다.
+- `listRequests`는 `scope`(`mine`, `request:review`가 필요한 `assigned`, `request:read:all`이 필요한 `all`), 쉼표로 구분한 `status`, `projectId`, `q`(제목 또는 `#번호`)를 받고, 최근에 바뀐 순으로 돌려줍니다.
+- 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
+
 ## 설정
 
 Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설명은 [`deploy/.env.example`](deploy/.env.example)에 있으니 복사해서 쓰면 됩니다. `.env` 파일은 git과 Docker 빌드 컨텍스트 모두에서 제외됩니다.
@@ -98,6 +106,7 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_SESSION_IDLE` | `24h` | 이 시간 동안 쓰지 않으면 로그인이 끝납니다(`s`, `m`, `h`, `d`) |
 | `AX_SESSION_MAX` | `7d` | 얼마나 쓰든 로그인한 뒤 이 시간이 지나면 끝납니다 |
 | `AX_SETUP_LINK_TTL` | `72h` | 일회용 설정 링크가 유효한 시간 |
+| `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |
 | `RUST_LOG` | `info` | 로그 필터 |
 
 상태 확인: `GET /healthz`(프로세스, 버전, 고정한 계약 커밋)와 `GET /readyz`(DB 연결)는 `AX_BASE_PATH`와 상관없이 루트에 있습니다.

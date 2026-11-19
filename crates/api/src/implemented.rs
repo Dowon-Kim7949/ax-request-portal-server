@@ -22,6 +22,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "listProjects",
     "createProject",
     "updateProject",
+    "listRequests",
+    "createRequest",
+    "getRequest",
+    "precheckRequest",
 ];
 
 #[cfg(test)]

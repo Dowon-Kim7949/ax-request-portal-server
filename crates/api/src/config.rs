@@ -8,6 +8,7 @@
 //! | `AX_SESSION_IDLE` | `24h`          | A sign-in ends after this long unused (`s`, `m`, `h`, `d`) |
 //! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
 //! | `AX_SETUP_LINK_TTL` | `72h`        | How long a one-time setup link works                       |
+//! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -25,6 +26,20 @@ pub struct Config {
     pub database_url: Option<String>,
     pub sessions: SessionPolicy,
     pub setup_links: SetupLinkPolicy,
+    pub time_zone: BusinessTimeZone,
+}
+
+/// The time zone of the business calendar (IANA name): what "today" is for
+/// desired and release dates, delays and monthly totals. The frontend's
+/// `appConfig.organization.timeZone`; both must name the same zone. Dates are
+/// computed by PostgreSQL, which checks the name when the server starts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BusinessTimeZone(pub String);
+
+impl Default for BusinessTimeZone {
+    fn default() -> Self {
+        Self("Asia/Seoul".to_owned())
+    }
 }
 
 /// How long a one-time setup link (to set or reset a password) works.
@@ -127,7 +142,9 @@ impl Config {
 
         let setup_links = SetupLinkPolicy { ttl: duration("AX_SETUP_LINK_TTL", SetupLinkPolicy::default().ttl)? };
 
-        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links })
+        let time_zone = non_empty("AX_TIME_ZONE").map_or_else(BusinessTimeZone::default, BusinessTimeZone);
+
+        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links, time_zone })
     }
 }
 
@@ -151,6 +168,8 @@ mod tests {
         assert_eq!(c.sessions.idle, Duration::from_secs(24 * 3600));
         assert_eq!(c.sessions.max, Duration::from_secs(7 * 24 * 3600));
         assert_eq!(c.setup_links.ttl, Duration::from_secs(72 * 3600));
+        assert_eq!(c.time_zone.0, "Asia/Seoul");
+        assert_eq!(config(&[("AX_TIME_ZONE", "Europe/Berlin")]).unwrap().time_zone.0, "Europe/Berlin");
         assert_eq!(config(&[("AX_SETUP_LINK_TTL", "2d")]).unwrap().setup_links.ttl, Duration::from_secs(48 * 3600));
         assert!(config(&[("AX_SETUP_LINK_TTL", "soon")]).is_err());
     }
