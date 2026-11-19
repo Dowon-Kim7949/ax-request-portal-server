@@ -36,6 +36,8 @@ services:
       AX_SESSION_MAX: ${AX_SESSION_MAX:-7d}
       AX_SETUP_LINK_TTL: ${AX_SETUP_LINK_TTL:-72h}
       AX_TIME_ZONE: ${AX_TIME_ZONE:-Asia/Seoul}
+      AX_AI_PROVIDER: ${AX_AI_PROVIDER:-stub}
+      AX_SCOPE_CHECK: ${AX_SCOPE_CHECK:-true}
     depends_on:
       db:
         condition: service_healthy

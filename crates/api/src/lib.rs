@@ -6,6 +6,7 @@
 //! of a 404, and syncing a newer contract makes new operations show up at once.
 
 pub mod accounts;
+pub mod ai;
 pub mod auth;
 pub mod body;
 pub mod cli;

@@ -20,6 +20,7 @@ use super::errors;
 use super::handlers::{parse_id, present};
 use super::lifecycle::{Event, Guard, Party, SCOPE_REVISIONS_MAX, Status};
 use super::store::{self, Actor, StoredRequest, field};
+use crate::ai;
 use crate::auth::CurrentUser;
 use crate::error::ApiError;
 use crate::lang::Lang;
@@ -73,6 +74,8 @@ pub async fn transition(
     .await
     .map_err(ApiError::db(lang))?;
     request.save(&mut tx).await.map_err(ApiError::db(lang))?;
+    // Back to `reporting` (an answer, a scope rewrite) or on to `in_progress`: the AI's turn.
+    ai::jobs::enqueue_for(&mut tx, id, request.status, lang).await.map_err(ApiError::db(lang))?;
     notifications::notify_status(&mut tx, &request, &owners, event.as_str(), Some(user.id))
         .await
         .map_err(ApiError::db(lang))?;

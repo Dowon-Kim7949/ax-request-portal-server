@@ -13,6 +13,7 @@ use super::draft::Draft;
 use super::lifecycle::{Event, Status};
 use super::precheck;
 use super::store::{self, Actor, StoredRequest, iso};
+use crate::ai;
 use crate::auth::{self, CurrentUser};
 use crate::error::{ApiError, Issue};
 use crate::lang::Lang;
@@ -112,6 +113,8 @@ pub async fn create(
     )
     .await
     .map_err(ApiError::db(lang))?;
+    // The AI writes the feasibility report in the requester's language.
+    ai::jobs::enqueue_for(&mut tx, id, rule.to, lang).await.map_err(ApiError::db(lang))?;
     let request = StoredRequest::find(&mut tx, id).await.map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
     let request = request.ok_or_else(|| ApiError::internal(lang))?;

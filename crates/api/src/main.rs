@@ -73,11 +73,17 @@ async fn serve(config: Config) -> Result<(), BoxError> {
             return Err(format!("AX_TIME_ZONE is not a time zone PostgreSQL knows: {:?}", config.time_zone.0).into());
         }
     }
+    if let Some(pool) = &db {
+        // The only provider so far (the configuration refuses any other).
+        ax_api::ai::jobs::spawn(pool.clone(), ax_api::ai::StubProvider, config.ai.clone());
+        tracing::info!(provider = %config.ai.provider, "AI worker started");
+    }
     let state = AppState {
         db,
         sessions: config.sessions,
         setup_links: config.setup_links,
         time_zone: config.time_zone.clone(),
+        ai: config.ai.clone(),
     };
     let app = router(state, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
