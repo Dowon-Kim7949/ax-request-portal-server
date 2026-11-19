@@ -201,6 +201,50 @@ impl ApiError {
         }
     }
 
+    /// `404`: no such request, or one the person may not open (the mock's
+    /// `requestNotFound`; existence is not given away).
+    pub fn request_not_found(lang: Lang, id: impl std::fmt::Display) -> Self {
+        let message = match lang {
+            Lang::Ko => format!("요청 #{id}을 찾을 수 없습니다."),
+            Lang::En => format!("Request #{id} was not found."),
+        };
+        Self::new(ErrorCode::NotFound, message)
+    }
+
+    /// `404` for a path parameter that is not a valid id (the mock's `notFound`
+    /// with the parameter's issue).
+    pub fn bad_path_param(lang: Lang, name: &str) -> Self {
+        let message = lang.pick("찾을 수 없습니다.", "Not found.");
+        Self::new(ErrorCode::NotFound, message)
+            .with_issues(vec![Issue { path: name.to_owned(), message: message.to_owned() }])
+    }
+
+    /// `400`: query parameters the operation does not accept (the mock's `badQuery`).
+    pub fn bad_query(lang: Lang, issues: Vec<Issue>) -> Self {
+        Self::new(ErrorCode::BadRequest, lang.pick("잘못된 조회 조건입니다.", "The query parameters are invalid."))
+            .with_issues(issues)
+    }
+
+    /// `400`: a target that is not one of the project's (the mock's `unknownTarget`).
+    pub fn unknown_target(lang: Lang, target: &str) -> Self {
+        let message = match lang {
+            Lang::Ko => format!("알 수 없는 대상입니다: {target}"),
+            Lang::En => format!("Unknown screen: {target}"),
+        };
+        Self::new(ErrorCode::BadRequest, message)
+    }
+
+    /// `400`: attachments that are missing or someone else's, one issue per
+    /// index (the mock's `attachmentNotFound`).
+    pub fn attachment_not_found(lang: Lang, paths: Vec<String>) -> Self {
+        let message = lang.pick(
+            "첨부 파일을 찾을 수 없습니다. 첨부를 지우고 다시 올려 주세요.",
+            "An attachment was not found. Remove it and upload it again.",
+        );
+        let issues = paths.into_iter().map(|path| Issue { path, message: message.to_owned() }).collect();
+        Self::new(ErrorCode::BadRequest, message).with_issues(issues)
+    }
+
     /// `404` (the mock's `userNotFound`).
     pub fn user_not_found(lang: Lang) -> Self {
         Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))

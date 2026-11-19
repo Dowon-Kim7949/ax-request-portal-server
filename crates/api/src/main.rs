@@ -64,7 +64,22 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         }
     };
 
-    let app = router(AppState { db, sessions: config.sessions, setup_links: config.setup_links }, &config);
+    if let Some(pool) = &db {
+        let known: bool = sqlx::query_scalar("select exists (select 1 from pg_timezone_names where name = $1)")
+            .bind(&config.time_zone.0)
+            .fetch_one(pool)
+            .await?;
+        if !known {
+            return Err(format!("AX_TIME_ZONE is not a time zone PostgreSQL knows: {:?}", config.time_zone.0).into());
+        }
+    }
+    let state = AppState {
+        db,
+        sessions: config.sessions,
+        setup_links: config.setup_links,
+        time_zone: config.time_zone.clone(),
+    };
+    let app = router(state, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(
         addr = %config.bind,

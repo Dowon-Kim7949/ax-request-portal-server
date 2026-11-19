@@ -9,7 +9,7 @@ The reference backend for **[AX Request Portal](https://github.com/Dowon-Kim7949
 
 The two repositories meet at one contract. The frontend owns it: `src/api/contract.ts` generates `docs/openapi.json`, the frontend's mock API and its typed client. This server copies that document byte for byte from a pinned frontend commit and implements it. Neither side imports the other's code.
 
-> **Status: sign-in, people, teams and projects.** Sign-in (`login`, `me`, `logout`, `completeSetup`), people and teams (`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`) and projects (`listProjects`, `createProject`, `updateProject`) work against PostgreSQL. The other 32 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
+> **Status: sign-in, people, teams and projects.** Sign-in (`login`, `me`, `logout`, `completeSetup`), people and teams (`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`) projects (`listProjects`, `createProject`, `updateProject`) and requests (`createRequest`, `getRequest`, `listRequests`, `precheckRequest`) work against PostgreSQL. The other 28 contract operations are routed and answer `501` with the contract's error body until they are implemented. Next: the request lifecycle, drafts, then the two AI jobs (feasibility report and AI work up to a merge request).
 
 ## How the contract stays in step
 
@@ -86,6 +86,14 @@ Passwords are never command-line arguments: the CLI prompts for them, or reads t
   - Not for operators (`403`, use `ax-api user set-password`) or deactivated people (`400`); deactivating someone deletes their unused link. An unknown, used or expired link is `401`, like a failed sign-in.
   - The token is stored as its SHA-256 only, like a session's, and rides in the URL fragment, which never reaches a server log.
 
+## Requests
+
+- `createRequest` (`request:create`) files a request: it starts `submitted` and moves to `reporting` at once (`startReport`), where the AI writes the feasibility report. It goes to the project's first owner. An unknown or inactive project, a target the project does not have, or an attachment that is not the caller's is `400`.
+- The precheck advice (`precheckRequest`, and stored with every new request) is a rule port of the frontend's `precheck.ts`: vague words, criteria not written as "when X, Y happens", missing reproduction steps, past dates. It never blocks, and speaks the request's language.
+- Who may open a request: whoever filed it, anyone with `request:read:all`, and its responsible developers (the assignee and the project's owners). Anyone else gets the same `404` as for a request that does not exist.
+- `listRequests` takes `scope` (`mine`, `assigned` with `request:review`, `all` with `request:read:all`), a comma-separated `status`, `projectId` and `q` (title, or `#id`), most recently changed first.
+- Requests keep what lists filter on in columns and the rest of the contract's `WorkRequest` as one JSONB object; the timeline is its own append-only table. Numbers start at 1.
+
 ## Configuration
 
 With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy/.env.example), which explains each one. Git ignores `.env` files, and so does the Docker build context.
@@ -98,6 +106,7 @@ With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy
 | `AX_SESSION_IDLE` | `24h` | A sign-in ends after this long unused (`s`, `m`, `h` or `d`) |
 | `AX_SESSION_MAX` | `7d` | A sign-in ends this long after signing in, however much it is used |
 | `AX_SETUP_LINK_TTL` | `72h` | How long a one-time setup link works |
+| `AX_TIME_ZONE` | `Asia/Seoul` | The business calendar (IANA name): "today" for desired and release dates, delays and monthly totals. Keep it equal to the frontend's `appConfig.organization.timeZone`; the server refuses to start with a name PostgreSQL does not know. |
 | `RUST_LOG` | `info` | Log filter |
 
 Probes: `GET /healthz` (process, version and pinned contract commit) and `GET /readyz` (database reachable) sit at the root whatever `AX_BASE_PATH` is.

@@ -35,6 +35,7 @@ services:
       AX_SESSION_IDLE: ${AX_SESSION_IDLE:-24h}
       AX_SESSION_MAX: ${AX_SESSION_MAX:-7d}
       AX_SETUP_LINK_TTL: ${AX_SETUP_LINK_TTL:-72h}
+      AX_TIME_ZONE: ${AX_TIME_ZONE:-Asia/Seoul}
     depends_on:
       db:
         condition: service_healthy

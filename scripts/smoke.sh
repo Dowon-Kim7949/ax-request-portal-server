@@ -34,8 +34,8 @@ curl -fsS "$API/healthz" | grep -q '"status":"ok"' || fail "/healthz is not ok"
 curl -fsS "$WEB/" | grep -q '<div id="root">' || fail "nginx does not serve the app"
 [[ "$(status "$WEB/mockServiceWorker.js")" == "404" ]] || fail "a real-backend build must not ship the mock service worker"
 
-[[ "$(status "$WEB/api/requests")" == "501" ]] || fail "/api/requests should reach the API (501 until implemented)"
-curl -s -H 'Accept-Language: en' "$WEB/api/requests" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
+[[ "$(status "$WEB/api/drafts")" == "501" ]] || fail "/api/drafts should reach the API (501 until implemented)"
+curl -s -H 'Accept-Language: en' "$WEB/api/drafts" | grep -q '"code":"internal"' || fail "/api/ errors must use the contract's body"
 [[ "$(status "$WEB/api/no-such-route")" == "404" ]] || fail "unknown API paths must be 404"
 
 # --- sign-in ---------------------------------------------------------------
@@ -87,6 +87,15 @@ project="{\"name\":\"Smoke $stamp\",\"description\":\"\",\"icon\":\"box\",\"repo
 r="$(call -X POST -d "$project" "$WEB/api/projects")"
 [[ "$(code "$r")" == "201" ]] || fail "createProject: $r"
 call "$WEB/api/projects" | grep -q "\"name\":\"Smoke $stamp\"" || fail "listProjects does not list the new project"
+project_id="$(json "$r" | sed -n 's/^{"id":"\([^"]*\)".*/\1/p')"
+
+# A request in that project: filed, then the AI reports on it.
+req="{\"projectId\":\"$project_id\",\"type\":\"non_code\",\"title\":\"Smoke request $stamp\",\"targetIds\":[],\"currentBehavior\":\"\",\"desiredBehavior\":\"A smoke test files a request\",\"acceptanceCriteria\":[{\"text\":\"When the smoke test runs, the request is listed\"}],\"attachmentIds\":[]}"
+r="$(call -X POST -d "$req" "$WEB/api/requests")"
+[[ "$(code "$r")" == "201" ]] && grep -q '"status":"reporting"' <<<"$r" || fail "createRequest: $r"
+request_id="$(json "$r" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')"
+[[ "$(code "$(call "$WEB/api/requests/$request_id")")" == "200" ]] || fail "getRequest #$request_id"
+call "$WEB/api/requests?scope=mine" | grep -q "\"title\":\"Smoke request $stamp\"" || fail "listRequests does not list the new request"
 
 # The person sets a password through a one-time setup link, then signs in with it.
 r="$(call -X POST "$WEB/api/users/$member_id/setup-link")"
@@ -110,4 +119,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, a request and a person, who set a password through a setup link; signed out)"
