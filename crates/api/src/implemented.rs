@@ -26,6 +26,17 @@ pub const IMPLEMENTED: &[&str] = &[
     "createRequest",
     "getRequest",
     "precheckRequest",
+    "transitionRequest",
+    "saveVerification",
+    "sendPreviewFeedback",
+    "updateRegression",
+    "updateRelease",
+    "regressionQueue",
+    "listNotifications",
+    "markNotificationRead",
+    "markAllNotificationsRead",
+    "getNotificationSettings",
+    "updateNotificationSettings",
 ];
 
 #[cfg(test)]

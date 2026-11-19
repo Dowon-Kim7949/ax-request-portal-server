@@ -20,7 +20,7 @@ use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
-use crate::{projects, requests, teams, users};
+use crate::{notifications, projects, requests, teams, users};
 
 /// The whole application.
 ///
@@ -91,6 +91,17 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "createRequest" => |methods, filter| methods.on(filter, requests::handlers::create),
         "getRequest" => |methods, filter| methods.on(filter, requests::handlers::get),
         "precheckRequest" => |methods, filter| methods.on(filter, requests::handlers::precheck),
+        "transitionRequest" => |methods, filter| methods.on(filter, requests::transitions::transition),
+        "saveVerification" => |methods, filter| methods.on(filter, requests::actions::save_verification),
+        "sendPreviewFeedback" => |methods, filter| methods.on(filter, requests::actions::preview_feedback),
+        "updateRegression" => |methods, filter| methods.on(filter, requests::actions::update_regression),
+        "updateRelease" => |methods, filter| methods.on(filter, requests::actions::update_release),
+        "regressionQueue" => |methods, filter| methods.on(filter, requests::actions::regression_queue),
+        "listNotifications" => |methods, filter| methods.on(filter, notifications::handlers::list),
+        "markNotificationRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_read),
+        "markAllNotificationsRead" => |methods, filter| methods.on(filter, notifications::handlers::mark_all_read),
+        "getNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::get_settings),
+        "updateNotificationSettings" => |methods, filter| methods.on(filter, notifications::handlers::update_settings),
         _ => return None,
     })
 }
