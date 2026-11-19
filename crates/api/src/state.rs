@@ -2,6 +2,7 @@
 
 use sqlx::PgPool;
 
+use crate::ai::claude::ClaudeProvider;
 use crate::attachments::Files;
 
 use crate::config::{AiSettings, BusinessTimeZone, DraftPolicy, SessionPolicy, SetupLinkPolicy};
@@ -19,6 +20,9 @@ pub struct AppState {
     pub drafts: DraftPolicy,
     /// Uploaded attachments and their download links.
     pub files: Files,
+    /// The Claude provider when `AX_AI_PROVIDER=anthropic`: the precheck
+    /// asks it directly; the report worker holds its own.
+    pub claude: Option<ClaudeProvider>,
 }
 
 impl AppState {
