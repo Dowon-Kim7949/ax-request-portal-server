@@ -9,9 +9,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use ax_api::ai::jobs::{MAX_ATTEMPTS, run_pending};
-use ax_api::ai::{Provider, ReportResult, StubProvider, WorkResult};
+use ax_api::ai::{Job, Provider, Reply, ReportResult, StubProvider, WorkResult};
 use ax_api::config::AiSettings;
-use ax_api::lang::Lang;
 use ax_api::requests::store::StoredRequest;
 use ax_api::roles::Role;
 use common::*;
@@ -160,17 +159,17 @@ async fn an_answer_gets_a_new_revision(pool: PgPool) {
 struct Feasible;
 
 impl Provider for Feasible {
-    async fn report(&self, request: &StoredRequest, lang: Lang) -> Result<ReportResult, String> {
-        let mut stub = StubProvider.report(request, lang).await?;
+    async fn report(&self, request: &StoredRequest, job: &Job) -> Reply<ReportResult> {
+        let mut stub = StubProvider.report(request, job).await.outcome.unwrap();
         stub.report["verdict"] = json!("feasible");
         stub.report["assumptions"] = json!([{ "id": "a1", "text": "Notices are server-side" }]);
         let scope = json!({ "summary": "Search box above the list", "changes": ["A search box"], "unchanged": ["The list"],
             "questions": [{ "id": "q1", "text": "Where?", "options": [{ "id": "o1", "label": "Top" }, { "id": "o2", "label": "Side" }] }] });
-        Ok(ReportResult { scope: Some(scope), ..stub })
+        Reply::ok(ReportResult { scope: Some(scope), ..stub })
     }
 
-    async fn work(&self, request: &StoredRequest, lang: Lang) -> Result<WorkResult, String> {
-        StubProvider.work(request, lang).await
+    async fn work(&self, request: &StoredRequest, job: &Job) -> Reply<WorkResult> {
+        StubProvider.work(request, job).await
     }
 }
 
@@ -204,12 +203,12 @@ async fn a_feasible_report_asks_the_requester_first(pool: PgPool) {
 struct Broken;
 
 impl Provider for Broken {
-    async fn report(&self, _: &StoredRequest, _: Lang) -> Result<ReportResult, String> {
-        Err("the model is down".into())
+    async fn report(&self, _: &StoredRequest, _: &Job) -> Reply<ReportResult> {
+        Reply::retry("the model is down")
     }
 
-    async fn work(&self, _: &StoredRequest, _: Lang) -> Result<WorkResult, String> {
-        Err("the model is down".into())
+    async fn work(&self, _: &StoredRequest, _: &Job) -> Reply<WorkResult> {
+        Reply::retry("the model is down")
     }
 }
 

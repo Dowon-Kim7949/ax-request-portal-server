@@ -9,7 +9,7 @@
 //! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
 //! | `AX_SETUP_LINK_TTL` | `72h`        | How long a one-time setup link works                       |
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
-//! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports and runs work (`stub` until one is wired)|
+//! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports: `stub`, or `anthropic` (Claude)        |
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
 //! | `AX_ANTHROPIC_API_KEY` | unset     | Claude Platform key for every AI task (see below)          |
 //! | `AX_ANTHROPIC_API_KEY_PRECHECK`, `_REPORT`, `_WORK` | unset | A key for one task, used before the one above |
@@ -54,7 +54,9 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiSettings {
     /// `stub`: writes an honest "no AI provider" report and work result, so
-    /// the lifecycle can be used end to end before a provider is wired.
+    /// the lifecycle can be used end to end without one. `anthropic`: Claude
+    /// writes the report (see `ai::claude`); work runs still wait for a
+    /// coding agent.
     pub provider: String,
     /// The frontend's `appConfig.workflow.scopeCheck`: after a feasible or
     /// conditional report the requester confirms the AI's reading of the
@@ -266,10 +268,8 @@ impl Config {
 
         let time_zone = non_empty("AX_TIME_ZONE").map_or_else(BusinessTimeZone::default, BusinessTimeZone);
         let provider = non_empty("AX_AI_PROVIDER").unwrap_or_else(|| "stub".to_owned());
-        if provider != "stub" {
-            return Err(ConfigError(format!(
-                "AX_AI_PROVIDER must be stub (the only provider so far), got {provider:?}"
-            )));
+        if provider != "stub" && provider != "anthropic" {
+            return Err(ConfigError(format!("AX_AI_PROVIDER must be stub or anthropic, got {provider:?}")));
         }
         let scope_check = match non_empty("AX_SCOPE_CHECK").as_deref() {
             None | Some("true") => true,
@@ -283,6 +283,11 @@ impl Config {
             report: secret("AX_ANTHROPIC_API_KEY_REPORT"),
             work: secret("AX_ANTHROPIC_API_KEY_WORK"),
         };
+        if provider == "anthropic" && !anthropic.connected() {
+            return Err(ConfigError(
+                "AX_AI_PROVIDER=anthropic needs AX_ANTHROPIC_API_KEY (or a key per task)".to_owned(),
+            ));
+        }
         let ai = AiSettings { provider, scope_check, anthropic };
 
         let drafts = match non_empty("AX_DRAFTS_PER_ACCOUNT") {
@@ -342,6 +347,9 @@ mod tests {
         assert!(!config(&[("AX_SCOPE_CHECK", "false")]).unwrap().ai.scope_check);
         assert!(config(&[("AX_SCOPE_CHECK", "no")]).is_err());
         assert!(config(&[("AX_AI_PROVIDER", "magic")]).is_err());
+        assert!(config(&[("AX_AI_PROVIDER", "anthropic")]).is_err(), "needs a key");
+        let claude = config(&[("AX_AI_PROVIDER", "anthropic"), ("AX_ANTHROPIC_API_KEY_REPORT", "k-1")]).unwrap();
+        assert_eq!(claude.ai.provider, "anthropic");
         assert_eq!(config(&[("AX_TIME_ZONE", "Europe/Berlin")]).unwrap().time_zone.0, "Europe/Berlin");
         assert_eq!(config(&[("AX_SETUP_LINK_TTL", "2d")]).unwrap().setup_links.ttl, Duration::from_secs(48 * 3600));
         assert!(config(&[("AX_SETUP_LINK_TTL", "soon")]).is_err());

@@ -7,6 +7,7 @@
 //! it cannot approve a merge, skip a review or move a request past a human
 //! checkpoint.
 
+pub mod claude;
 pub mod handlers;
 pub mod jobs;
 pub mod settings;
@@ -16,7 +17,10 @@ use std::future::Future;
 
 use serde_json::{Value, json};
 
+use self::settings::Selection;
+use self::usage::Tokens;
 use crate::lang::Lang;
+use crate::projects::Project;
 use crate::requests::store::{StoredRequest, field};
 
 /// What a provider writes for a report. `revision` and `generatedAt` are
@@ -42,10 +46,65 @@ pub struct WorkResult {
     pub regression: Vec<Value>,
 }
 
-/// Writes reports and runs work. Errors are retried by the job queue.
+/// What a job is run for: the request's project, the model the settings
+/// chose, and the language to write in.
+#[derive(Debug, Clone)]
+pub struct Job {
+    pub lang: Lang,
+    pub selection: Selection,
+    /// `None` only if the project vanished, which the schema prevents.
+    pub project: Option<Project>,
+}
+
+/// One billed model call or agent run: the model that ran it and its tokens.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spend {
+    pub model: String,
+    pub tokens: Tokens,
+}
+
+/// Why a job did not finish. `retry` is false when trying again would end
+/// the same way (a refusal, a missing key, a rejected request).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Failure {
+    pub message: String,
+    pub retry: bool,
+}
+
+/// A provider's answer: the result or why there is none, and what it cost
+/// either way (the job books every spend, even for a failed or discarded run).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reply<T> {
+    pub outcome: Result<T, Failure>,
+    pub spend: Vec<Spend>,
+}
+
+impl<T> Reply<T> {
+    pub fn ok(value: T) -> Self {
+        Self { outcome: Ok(value), spend: Vec::new() }
+    }
+
+    /// A failure worth trying again later (an outage, a rate limit).
+    pub fn retry(message: impl Into<String>) -> Self {
+        Self { outcome: Err(Failure { message: message.into(), retry: true }), spend: Vec::new() }
+    }
+
+    /// A failure that would only repeat.
+    pub fn fail(message: impl Into<String>) -> Self {
+        Self { outcome: Err(Failure { message: message.into(), retry: false }), spend: Vec::new() }
+    }
+
+    #[must_use]
+    pub fn with_spend(mut self, spend: Vec<Spend>) -> Self {
+        self.spend = spend;
+        self
+    }
+}
+
+/// Writes reports and runs work.
 pub trait Provider: Send + Sync + 'static {
-    fn report(&self, request: &StoredRequest, lang: Lang) -> impl Future<Output = Result<ReportResult, String>> + Send;
-    fn work(&self, request: &StoredRequest, lang: Lang) -> impl Future<Output = Result<WorkResult, String>> + Send;
+    fn report(&self, request: &StoredRequest, job: &Job) -> impl Future<Output = Reply<ReportResult>> + Send;
+    fn work(&self, request: &StoredRequest, job: &Job) -> impl Future<Output = Reply<WorkResult>> + Send;
 }
 
 /// The provider until a real one is wired: it says so, in the request's
@@ -55,7 +114,8 @@ pub trait Provider: Send + Sync + 'static {
 pub struct StubProvider;
 
 impl Provider for StubProvider {
-    async fn report(&self, request: &StoredRequest, lang: Lang) -> Result<ReportResult, String> {
+    async fn report(&self, request: &StoredRequest, job: &Job) -> Reply<ReportResult> {
+        let lang = job.lang;
         let method = lang.pick("사람이 직접 확인", "Checked by hand");
         let verification: Vec<Value> = field(&request.details, "acceptanceCriteria")
             .as_array()
@@ -67,7 +127,7 @@ impl Provider for StubProvider {
             "AI 제공자가 연결되지 않아 구현 가능성을 판단하지 않았습니다. 담당 개발자가 직접 검토해 주세요.",
             "No AI provider is connected, so feasibility was not assessed. The responsible developer reviews the request by hand.",
         );
-        Ok(ReportResult {
+        Reply::ok(ReportResult {
             report: json!({
                 "verdict": "undetermined",
                 "summary": summary,
@@ -86,8 +146,9 @@ impl Provider for StubProvider {
         })
     }
 
-    async fn work(&self, _request: &StoredRequest, lang: Lang) -> Result<WorkResult, String> {
-        Ok(WorkResult {
+    async fn work(&self, _request: &StoredRequest, job: &Job) -> Reply<WorkResult> {
+        let lang = job.lang;
+        Reply::ok(WorkResult {
             outcome: "error".to_owned(),
             summary: lang
                 .pick(

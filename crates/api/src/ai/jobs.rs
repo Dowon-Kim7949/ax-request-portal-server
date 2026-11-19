@@ -7,10 +7,15 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
-use super::Provider;
+use uuid::Uuid;
+
+use super::settings::{self, Selection};
+use super::usage::{self, Call};
+use super::{Job as JobContext, Provider, Spend};
 use crate::config::AiSettings;
 use crate::lang::Lang;
 use crate::notifications;
+use crate::projects::Project;
 use crate::requests::lifecycle::{Event, Status};
 use crate::requests::store::{self, Actor, StoredRequest, field};
 
@@ -126,16 +131,46 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
         return Ok(true);
     };
 
-    let outcome = match job.task {
-        Task::Report => provider.report(&request, job.lang).await.map(Done::Report),
-        Task::Work => provider.work(&request, job.lang).await.map(Done::Work),
+    let context = {
+        let mut conn = db.acquire().await?;
+        let project = Project::find(&mut *conn, &request.project_id.to_string()).await?;
+        let selection = match (job.task, field(&request.details, "work").get("agent")) {
+            // A work run uses the agent recorded when it started.
+            (Task::Work, Some(agent)) => Selection {
+                provider: agent["provider"].as_str().unwrap_or("anthropic").to_owned(),
+                model: agent["model"].as_str().unwrap_or_default().to_owned(),
+            },
+            _ => settings::selections(&mut conn)
+                .await?
+                .resolve(&request.project_id.to_string(), job.task.as_str())
+                .clone(),
+        };
+        JobContext { lang: job.lang, selection, project }
     };
+
+    let (outcome, spend) = match job.task {
+        Task::Report => {
+            let reply = provider.report(&request, &context).await;
+            (reply.outcome.map(Done::Report), reply.spend)
+        }
+        Task::Work => {
+            let reply = provider.work(&request, &context).await;
+            (reply.outcome.map(Done::Work), reply.spend)
+        }
+    };
+    // Every call is booked, whatever became of it, against the person whose
+    // step started the job.
+    let cost_krw = book(db, &job, &request, &context.selection, &spend).await?;
     let done = match outcome {
         Ok(done) => done,
-        Err(error) => {
-            tracing::warn!(job = job.id, request = job.request, %error, "AI job failed");
-            let (status, retry) =
-                if job.attempts < MAX_ATTEMPTS { ("queued", job.attempts * 30) } else { ("failed", 0) };
+        Err(failure) => {
+            let error = failure.message;
+            tracing::warn!(job = job.id, request = job.request, %error, retry = failure.retry, "AI job failed");
+            let (status, retry) = if failure.retry && job.attempts < MAX_ATTEMPTS {
+                ("queued", job.attempts * 30)
+            } else {
+                ("failed", 0)
+            };
             sqlx::query(
                 "update ai_jobs
                     set status = $2, error = $3, run_after = now() + make_interval(secs => $4),
@@ -163,7 +198,7 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
     let at = store::now_iso(&mut *tx).await?;
     let event = match done {
         Done::Report(result) => apply_report(&mut request, result, &at, settings),
-        Done::Work(result) => apply_work(&mut request, result, &at),
+        Done::Work(result) => apply_work(&mut request, result, &at, cost_krw),
     };
     let from = request.status;
     request.status = event.rule().to;
@@ -174,6 +209,52 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
     finish(&mut *tx, job.id).await?;
     tx.commit().await?;
     Ok(true)
+}
+
+/// Books each spend at today's prices; returns the won booked. A model
+/// without a price is logged and not booked (the frontend's `bookUsage`).
+async fn book(
+    db: &PgPool,
+    job: &Job,
+    request: &StoredRequest,
+    selection: &Selection,
+    spend: &[Spend],
+) -> Result<f64, sqlx::Error> {
+    let user = started_by(request, job.task.waits_in());
+    let mut conn = db.acquire().await?;
+    let mut booked = 0.0;
+    for s in spend {
+        let ran = Selection { provider: selection.provider.clone(), model: s.model.clone() };
+        let call = Call {
+            task: job.task.as_str(),
+            selection: &ran,
+            request_id: Some(request.id),
+            user_id: user,
+            tokens: s.tokens,
+        };
+        // The entry's business date is not used here, so any zone will do.
+        match usage::book(&mut conn, "UTC", &call).await? {
+            Some(entry) => booked += entry.cost_krw,
+            None => tracing::warn!(model = %s.model, "AI usage of a model without a price was not booked"),
+        }
+    }
+    Ok(booked)
+}
+
+/// The person whose step put the request where the job runs: whoever moved
+/// it into `status` last; the requester when nobody did (the first report
+/// starts by itself on submission). The mock API's `startedBy`.
+pub fn started_by(request: &StoredRequest, status: Status) -> Uuid {
+    for entry in request.timeline.iter().rev() {
+        if entry["to"].as_str() != Some(status.as_str()) {
+            continue;
+        }
+        if let Some(user) = entry["actor"]["userId"].as_str().and_then(|u| Uuid::parse_str(u).ok()) {
+            return user;
+        }
+        break;
+    }
+    request.requester_id
 }
 
 enum Done {
@@ -202,8 +283,8 @@ fn apply_report(request: &mut StoredRequest, result: super::ReportResult, at: &s
     }
 }
 
-/// Closes the work run with the provider's result.
-fn apply_work(request: &mut StoredRequest, result: super::WorkResult, at: &str) -> Event {
+/// Closes the work run with the provider's result and what it cost.
+fn apply_work(request: &mut StoredRequest, result: super::WorkResult, at: &str, cost_krw: f64) -> Event {
     let d = &mut request.details;
     let mut work = field(d, "work").clone();
     if !work.is_object() {
@@ -213,6 +294,9 @@ fn apply_work(request: &mut StoredRequest, result: super::WorkResult, at: &str) 
     work["finishedAt"] = json!(at);
     work["outcome"] = json!(result.outcome);
     work["summary"] = json!(result.summary);
+    if cost_krw > 0.0 {
+        work["costKrw"] = usage::money(usage::round_money(cost_krw));
+    }
     for (key, value) in result.extra {
         work[key.as_str()] = value;
     }
