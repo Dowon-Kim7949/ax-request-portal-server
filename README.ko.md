@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 28개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 17개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
 
 ## 계약을 맞추는 방법
 
@@ -92,6 +92,20 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
 - 사전 점검(`precheckRequest`, 새 요청에도 저장)은 프런트엔드 `precheck.ts`의 규칙을 그대로 옮겼습니다. 모호한 표현, "~하면 ~된다" 형식이 아닌 완료 기준, 빠진 재현 순서, 지난 날짜를 짚습니다. 접수를 막지 않으며 요청의 언어로 답합니다.
 - 요청을 열 수 있는 사람은 요청한 본인, `request:read:all` 권한이 있는 사람, 그 요청의 담당 개발자(담당자와 프로젝트 담당자)입니다. 그 밖의 사람에게는 없는 요청과 똑같이 `404`를 돌려줍니다.
 - `listRequests`는 `scope`(`mine`, `request:review`가 필요한 `assigned`, `request:read:all`이 필요한 `all`), 쉼표로 구분한 `status`, `projectId`, `q`(제목 또는 `#번호`)를 받고, 최근에 바뀐 순으로 돌려줍니다.
+- `transitionRequest`는 사람이 보낼 수 있는 이벤트 12가지를 받습니다. 목 API와 같은 순서로 검사합니다.
+  1. 본문을 검사합니다.
+  2. 요청을 열 수 없는 사람이면 `404`입니다.
+  3. 그 사람의 단계가 아니면 `403 notYourStep`입니다. 이 검사는 상태와 상관없이 먼저 합니다. 요청자의 이벤트는 요청자가 보내고(취소는 관리자도 할 수 있음), 개발자의 이벤트는 담당 개발자가 보냅니다.
+  4. 지금 상태에서 할 수 없는 이벤트면 `409 invalid_transition`입니다.
+  5. 가드에 걸리면 `409 guard_failed`입니다. 가드는 다음과 같습니다: 완료 기준 전부 통과, 하나 이상 실패, 가정 확인, 범위 질문 답변, 범위 다시 정리는 두 번까지, 배포 예정일 설정.
+
+  AI와 시스템의 이벤트는 API로 받지 않습니다. 그래서 AI가 사람의 단계를 건너뛸 수 없습니다.
+- 상태 변경, 타임라인 기록, 그에 따른 알림은 요청 행을 잠근 한 트랜잭션에서 처리합니다. 요청을 움직이는 것 말고도 할 수 있는 일이 있습니다. 요청자는 체크리스트를 저장하고 미리보기에 의견을 남깁니다. 담당 개발자는 회귀 확인 결과를 기록하고 배포 일정을 정합니다. 새 배포 예정일은 업무 달력 기준 오늘보다 앞설 수 없습니다.
+- 알림은 메시지 키와 매개변수로 저장하고, 목록을 볼 때 읽는 사람의 언어로 씁니다. 문구는 목 API와 같습니다.
+  - 알림을 일으킨 본인에게는 보내지 않습니다.
+  - 설정으로 앱 알림을 끄거나, 조치가 필요한 알림만 받을 수 있습니다.
+  - 한 사람당 최근 200개까지만 남깁니다.
+  - 실제로 보내는 것은 앱 알림뿐입니다. 이메일과 메신저 설정은 그 채널을 보내는 백엔드를 위해 저장만 합니다.
 - 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
 
 ## 설정

@@ -27,6 +27,13 @@ fn select() -> String {
     )
 }
 
+/// A field of a JSON object, or `null` when it is missing (indexing a
+/// `serde_json::Map` directly would panic).
+pub fn field<'a>(map: &'a Map<String, Value>, key: &str) -> &'a Value {
+    static NULL: Value = Value::Null;
+    map.get(key).unwrap_or(&NULL)
+}
+
 /// Who did something on the timeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Actor {
@@ -91,6 +98,49 @@ impl StoredRequest {
         let mut request = Self::from_row(&row)?;
         request.timeline = timeline(&mut *db, id).await?;
         Ok(Some(request))
+    }
+
+    /// Like [`StoredRequest::find`], locking the row until the transaction
+    /// ends, so changes to one request apply one after another.
+    ///
+    /// # Errors
+    ///
+    /// Database failures.
+    pub async fn find_for_update(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<Option<Self>, sqlx::Error> {
+        let row =
+            sqlx::query(&format!("{} where r.id = $1 for update", select())).bind(id).fetch_optional(&mut **tx).await?;
+        let Some(row) = row else { return Ok(None) };
+        let mut request = Self::from_row(&row)?;
+        request.timeline = timeline(&mut **tx, id).await?;
+        Ok(Some(request))
+    }
+
+    /// Writes status, assignee and details back; `updated_at` is the
+    /// transaction's time. The timeline is appended separately ([`add_event`]).
+    ///
+    /// # Errors
+    ///
+    /// Database failures.
+    pub async fn save(&mut self, tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
+        self.updated_at = sqlx::query_scalar(&format!(
+            "update requests set status = $2, assignee_id = $3, details = $4, updated_at = now()
+              where id = $1
+              returning {}",
+            iso("updated_at")
+        ))
+        .bind(self.id)
+        .bind(self.status.as_str())
+        .bind(self.assignee_id)
+        .bind(Value::Object(self.details.clone()))
+        .fetch_one(&mut **tx)
+        .await?;
+        self.timeline = timeline(&mut **tx, self.id).await?;
+        Ok(())
+    }
+
+    /// The number of timeline entries for `event`.
+    pub fn count_events(&self, event: &str) -> usize {
+        self.timeline.iter().filter(|e| e["event"] == event).count()
     }
 
     /// The developers responsible for it: the assignee, then the project's owners.
@@ -223,4 +273,14 @@ pub async fn today(db: impl PgExecutor<'_>, time_zone: &str) -> Result<String, s
         .bind(time_zone)
         .fetch_one(db)
         .await
+}
+
+/// The transaction's time as `toISOString` writes it: what changes made in it
+/// are dated with.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn now_iso(db: impl PgExecutor<'_>) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(&format!("select {}", iso("now()"))).fetch_one(db).await
 }
