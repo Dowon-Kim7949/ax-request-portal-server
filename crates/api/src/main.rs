@@ -87,6 +87,9 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         None => ax_api::attachments::random_key(),
     };
     let files = Files::new(&config.upload_dir, &config.public_path, file_key);
+    if config.ai.provider == "stub" && config.ai.runner_token.is_none() && config.ai.anthropic.connected() {
+        tracing::warn!("an Anthropic key is set but AX_AI_PROVIDER is stub: no AI task uses it");
+    }
     if let (Some(_), Some(_)) = (&db, &config.ai.runner_token) {
         tracing::info!("AI jobs wait for a runner (AX_RUNNER_TOKEN is set)");
     } else if let Some(pool) = &db {

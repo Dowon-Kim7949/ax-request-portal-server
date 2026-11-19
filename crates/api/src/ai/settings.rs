@@ -194,10 +194,13 @@ impl Pricing {
     }
 }
 
-/// Whether `provider` has a key in the configuration. Only Anthropic can be
-/// connected: no other provider is wired.
+/// Whether `provider` is connected: a key in the configuration and Claude in
+/// use, by the server (`AX_AI_PROVIDER=anthropic`) or by a runner
+/// (`AX_RUNNER_TOKEN`). With the stub a key does nothing, so the console must
+/// not show it as connected. Only Anthropic can be connected: no other
+/// provider is wired.
 pub fn connected(ai: &AiSettings, provider: &str) -> bool {
-    provider == "anthropic" && ai.anthropic.connected()
+    provider == "anthropic" && ai.anthropic.connected() && (ai.provider == "anthropic" || ai.runner_token.is_some())
 }
 
 /// The contract's `ProviderConnection` list, one per provider, in order.
@@ -595,8 +598,14 @@ mod tests {
             ]
         );
         ai.anthropic = TaskKeys { default: Some(Secret::new("sk-ant-secret-ab12")), ..TaskKeys::default() };
+        assert!(!connected(&ai, "anthropic"), "the stub uses no key");
+        assert_eq!(connections(&ai)[0], json!({ "provider": "anthropic", "connected": false }));
+        ai.provider = "anthropic".to_owned();
         assert_eq!(connections(&ai)[0], json!({ "provider": "anthropic", "connected": true, "keyHint": "ab12" }));
         assert!(connected(&ai, "anthropic"));
         assert!(!connected(&ai, "openai"), "only wired providers connect");
+        ai.provider = "stub".to_owned();
+        ai.runner_token = Some(Secret::new("r".repeat(32)));
+        assert!(connected(&ai, "anthropic"), "a runner uses the keys");
     }
 }
