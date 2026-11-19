@@ -1,4 +1,4 @@
 repo=https://github.com/Dowon-Kim7949/ax-request-portal
-commit=8c32acdce75ecfcd9a7697c9c7d9934833b7fb18
+commit=79e781a5a0cf77d6f558b29c171a11bc61674419
 path=docs/openapi.json
 path=docs/lifecycle.json
