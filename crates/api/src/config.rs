@@ -8,6 +8,8 @@
 //! | `AX_SESSION_IDLE` | `24h`          | A sign-in ends after this long unused (`s`, `m`, `h`, `d`) |
 //! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
 //! | `AX_SETUP_LINK_TTL` | `72h`        | How long a one-time setup link works                       |
+//! | `AX_LOGIN_ATTEMPTS` | `5`          | Failed sign-ins per email before a lockout                 |
+//! | `AX_LOGIN_LOCKOUT`  | `15m`        | The window they are counted in, and the lockout's length   |
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports: `stub`, or `anthropic` (Claude)        |
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
@@ -39,6 +41,7 @@ pub struct Config {
     pub database_url: Option<String>,
     pub sessions: SessionPolicy,
     pub setup_links: SetupLinkPolicy,
+    pub login: LoginPolicy,
     pub time_zone: BusinessTimeZone,
     pub ai: AiSettings,
     pub drafts: DraftPolicy,
@@ -166,6 +169,20 @@ impl Default for BusinessTimeZone {
     }
 }
 
+/// Password guessing: after `attempts` failed sign-ins for one email within
+/// `lockout`, sign-ins for it are refused for `lockout` (see `auth::throttle`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoginPolicy {
+    pub attempts: u32,
+    pub lockout: Duration,
+}
+
+impl Default for LoginPolicy {
+    fn default() -> Self {
+        Self { attempts: 5, lockout: Duration::from_secs(15 * MINUTE) }
+    }
+}
+
 /// How long a one-time setup link (to set or reset a password) works.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SetupLinkPolicy {
@@ -265,6 +282,15 @@ impl Config {
         }
 
         let setup_links = SetupLinkPolicy { ttl: duration("AX_SETUP_LINK_TTL", SetupLinkPolicy::default().ttl)? };
+        let login = LoginPolicy {
+            attempts: match non_empty("AX_LOGIN_ATTEMPTS") {
+                None => LoginPolicy::default().attempts,
+                Some(value) => value.parse().ok().filter(|n| *n > 0).ok_or_else(|| {
+                    ConfigError(format!("AX_LOGIN_ATTEMPTS must be a whole number above 0, got {value:?}"))
+                })?,
+            },
+            lockout: duration("AX_LOGIN_LOCKOUT", LoginPolicy::default().lockout)?,
+        };
 
         let time_zone = non_empty("AX_TIME_ZONE").map_or_else(BusinessTimeZone::default, BusinessTimeZone);
         let provider = non_empty("AX_AI_PROVIDER").unwrap_or_else(|| "stub".to_owned());
@@ -312,6 +338,7 @@ impl Config {
             database_url: non_empty("DATABASE_URL"),
             sessions,
             setup_links,
+            login,
             time_zone,
             ai,
             drafts,
@@ -390,6 +417,16 @@ mod tests {
         assert_eq!(only_work.hint().as_deref(), Some("3333"));
         let same = config(&[("AX_ANTHROPIC_API_KEY", "k-9999"), ("AX_ANTHROPIC_API_KEY_WORK", "k-9999")]).unwrap();
         assert_eq!(same.ai.anthropic.hint().as_deref(), Some("9999"));
+    }
+
+    #[test]
+    fn sign_in_lockout() {
+        assert_eq!(config(&[]).unwrap().login, LoginPolicy { attempts: 5, lockout: Duration::from_secs(900) });
+        let c = config(&[("AX_LOGIN_ATTEMPTS", "10"), ("AX_LOGIN_LOCKOUT", "1h")]).unwrap();
+        assert_eq!(c.login, LoginPolicy { attempts: 10, lockout: Duration::from_secs(3600) });
+        for (name, bad) in [("AX_LOGIN_ATTEMPTS", "0"), ("AX_LOGIN_ATTEMPTS", "lots"), ("AX_LOGIN_LOCKOUT", "soon")] {
+            assert!(config(&[(name, bad)]).is_err(), "{name}={bad}");
+        }
     }
 
     #[test]

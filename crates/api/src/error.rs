@@ -121,6 +121,18 @@ impl ApiError {
         )
     }
 
+    /// `401` from `login` for an email with too many failed sign-ins, until
+    /// the lockout ends (this server's rule; the frontend shows the message).
+    pub fn sign_in_locked(lang: Lang, seconds: u64) -> Self {
+        let minutes = seconds.div_ceil(60).max(1);
+        let message = match lang {
+            Lang::Ko => format!("로그인 시도가 너무 많습니다. {minutes}분 뒤에 다시 시도해 주세요."),
+            Lang::En if minutes == 1 => "Too many sign-in attempts. Try again in 1 minute.".to_owned(),
+            Lang::En => format!("Too many sign-in attempts. Try again in {minutes} minutes."),
+        };
+        Self::new(ErrorCode::Unauthorized, message)
+    }
+
     /// `403`: the role lacks the permission (the mock's `forbidden`).
     pub fn forbidden(lang: Lang) -> Self {
         Self::new(

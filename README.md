@@ -57,6 +57,7 @@ The database tests need PostgreSQL: `scripts/cargo.sh test` starts a throwaway o
 - A sign-in ends after `AX_SESSION_IDLE` unused (default 24 hours) and `AX_SESSION_MAX` after signing in (default 7 days). There is no refresh; on `401` the frontend asks the person to sign in again.
 - `logout` ends the session at once, and deactivating an account ends all of its sign-ins on their next request.
 - Passwords are hashed with Argon2id (19 MiB, 2 passes). A failed sign-in answers the same way whatever the reason (no such account, deactivated, wrong password), and takes as long.
+- Guessing is limited per email: past `AX_LOGIN_ATTEMPTS` (5) failed sign-ins within `AX_LOGIN_LOCKOUT` (15 minutes), sign-ins for that email answer `401` with when to try again, even with the right password, until the lockout has passed. Attempts are counted before the password is checked, so parallel guesses cannot slip past, and unknown emails are counted alike, so nothing tells which emails exist. A successful sign-in clears the count. Someone who knows an email can keep it locked by guessing; an admin can still send that person a setup link.
 - Errors match the frontend's mock API: `401 unauthorized` for a failed sign-in or a missing, unknown or ended token; `403 forbidden` for a role without the permission; `400 bad_request` with `issues` for a body that does not match the contract. Messages follow `Accept-Language`.
 - Roles and permissions are the frontend's `src/domain/roles.ts` (5 roles, 13 permissions). Operator accounts are provisioned by the service, never by an admin: only the CLI makes them.
 - One difference from the contract: the contract lists only `200` and `400` for `login`, but a failed sign-in is `401`, as in the mock API the client is built against. The fix belongs in the frontend's `contract.ts`.
@@ -135,6 +136,8 @@ With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy
 | `AX_SESSION_IDLE` | `24h` | A sign-in ends after this long unused (`s`, `m`, `h` or `d`) |
 | `AX_SESSION_MAX` | `7d` | A sign-in ends this long after signing in, however much it is used |
 | `AX_SETUP_LINK_TTL` | `72h` | How long a one-time setup link works |
+| `AX_LOGIN_ATTEMPTS` | `5` | Failed sign-ins per email before sign-ins for it are refused |
+| `AX_LOGIN_LOCKOUT` | `15m` | The window failed sign-ins are counted in, and how long the refusal lasts |
 | `AX_ANTHROPIC_API_KEY` | unset | Claude Platform key for every AI task. Never returned by the API; the console shows its last four characters. |
 | `AX_ANTHROPIC_API_KEY_PRECHECK`, `AX_ANTHROPIC_API_KEY_REPORT`, `AX_ANTHROPIC_API_KEY_WORK` | unset | A key for one task, used instead of `AX_ANTHROPIC_API_KEY` for it |
 | `AX_AI_PROVIDER` | `stub` | Who writes reports: `stub`, or `anthropic` (Claude; needs a key). Work runs wait for a coding agent either way. |
