@@ -11,6 +11,8 @@
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
 //! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports and runs work (`stub` until one is wired)|
 //! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
+//! | `AX_ANTHROPIC_API_KEY` | unset     | Claude Platform key for every AI task (see below)          |
+//! | `AX_ANTHROPIC_API_KEY_PRECHECK`, `_REPORT`, `_WORK` | unset | A key for one task, used before the one above |
 //! | `AX_DRAFTS_PER_ACCOUNT` | `20`     | How many saved drafts one person may keep                  |
 //! | `AX_UPLOAD_DIR`   | `uploads`      | Where uploaded attachments are kept (created if missing)   |
 //! | `AX_PUBLIC_PATH`  | `/api`         | Where the browser reaches this server, for attachment links |
@@ -18,6 +20,11 @@
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
 //! Set `AX_BASE_PATH=/api` when a proxy forwards the prefix unchanged.
+//!
+//! Provider keys come only from here, never from the API: the console shows a
+//! provider as connected with the last four characters of its keys, and
+//! `setProviderKey` / `removeProviderKey` answer `403`. A key per task lets an
+//! organisation see each task's spending on its own key.
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -53,11 +60,81 @@ pub struct AiSettings {
     /// conditional report the requester confirms the AI's reading of the
     /// request (`scope_check`) before a developer reviews it.
     pub scope_check: bool,
+    /// Anthropic (Claude Platform) keys.
+    pub anthropic: TaskKeys,
 }
 
 impl Default for AiSettings {
     fn default() -> Self {
-        Self { provider: "stub".to_owned(), scope_check: true }
+        Self { provider: "stub".to_owned(), scope_check: true, anthropic: TaskKeys::default() }
+    }
+}
+
+/// A secret from the environment. Its `Debug` output never shows it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// The secret itself, for the one place that sends it.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
+    /// The last four characters, which the console shows.
+    pub fn hint(&self) -> String {
+        let tail: Vec<char> = self.0.chars().rev().take(4).collect();
+        tail.into_iter().rev().collect()
+    }
+}
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret(…)")
+    }
+}
+
+/// One provider's keys: one for every task, and optionally one per task,
+/// which wins for that task.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TaskKeys {
+    pub default: Option<Secret>,
+    pub precheck: Option<Secret>,
+    pub report: Option<Secret>,
+    pub work: Option<Secret>,
+}
+
+impl TaskKeys {
+    /// The key for `task` (`precheck`, `report` or `work`).
+    pub fn for_task(&self, task: &str) -> Option<&Secret> {
+        let own = match task {
+            "precheck" => self.precheck.as_ref(),
+            "report" => self.report.as_ref(),
+            "work" => self.work.as_ref(),
+            _ => None,
+        };
+        own.or(self.default.as_ref())
+    }
+
+    /// Whether any key is set: the provider counts as connected.
+    pub fn connected(&self) -> bool {
+        [&self.default, &self.precheck, &self.report, &self.work].iter().any(|k| k.is_some())
+    }
+
+    /// The last four characters of each distinct key, in the order default,
+    /// precheck, report, work; `None` without keys.
+    pub fn hint(&self) -> Option<String> {
+        let mut hints: Vec<String> = Vec::new();
+        for key in [&self.default, &self.precheck, &self.report, &self.work].into_iter().flatten() {
+            let hint = key.hint();
+            if !hints.contains(&hint) {
+                hints.push(hint);
+            }
+        }
+        (!hints.is_empty()).then(|| hints.join(", "))
     }
 }
 
@@ -199,7 +276,14 @@ impl Config {
             Some("false") => false,
             Some(other) => return Err(ConfigError(format!("AX_SCOPE_CHECK must be true or false, got {other:?}"))),
         };
-        let ai = AiSettings { provider, scope_check };
+        let secret = |name: &str| non_empty(name).map(Secret);
+        let anthropic = TaskKeys {
+            default: secret("AX_ANTHROPIC_API_KEY"),
+            precheck: secret("AX_ANTHROPIC_API_KEY_PRECHECK"),
+            report: secret("AX_ANTHROPIC_API_KEY_REPORT"),
+            work: secret("AX_ANTHROPIC_API_KEY_WORK"),
+        };
+        let ai = AiSettings { provider, scope_check, anthropic };
 
         let drafts = match non_empty("AX_DRAFTS_PER_ACCOUNT") {
             None => DraftPolicy::default(),
@@ -253,7 +337,8 @@ mod tests {
         assert_eq!(c.sessions.max, Duration::from_secs(7 * 24 * 3600));
         assert_eq!(c.setup_links.ttl, Duration::from_secs(72 * 3600));
         assert_eq!(c.time_zone.0, "Asia/Seoul");
-        assert_eq!(c.ai, AiSettings { provider: "stub".into(), scope_check: true });
+        assert_eq!(c.ai, AiSettings::default());
+        assert!(!c.ai.anthropic.connected());
         assert!(!config(&[("AX_SCOPE_CHECK", "false")]).unwrap().ai.scope_check);
         assert!(config(&[("AX_SCOPE_CHECK", "no")]).is_err());
         assert!(config(&[("AX_AI_PROVIDER", "magic")]).is_err());
@@ -278,6 +363,25 @@ mod tests {
     #[test]
     fn base_path_loses_its_trailing_slash() {
         assert_eq!(config(&[("AX_BASE_PATH", "/api/")]).unwrap().base_path, "/api");
+    }
+
+    #[test]
+    fn provider_keys_per_task() {
+        let c =
+            config(&[("AX_ANTHROPIC_API_KEY", "sk-default-1111"), ("AX_ANTHROPIC_API_KEY_REPORT", " sk-report-2222 ")])
+                .unwrap();
+        let keys = &c.ai.anthropic;
+        assert!(keys.connected());
+        assert_eq!(keys.for_task("report").map(Secret::expose), Some("sk-report-2222"));
+        assert_eq!(keys.for_task("work").map(Secret::expose), Some("sk-default-1111"));
+        assert_eq!(keys.hint().as_deref(), Some("1111, 2222"));
+        assert!(!format!("{c:?}").contains("sk-"), "keys never reach the log");
+
+        let only_work = config(&[("AX_ANTHROPIC_API_KEY_WORK", "sk-work-3333")]).unwrap().ai.anthropic;
+        assert_eq!(only_work.for_task("report"), None);
+        assert_eq!(only_work.hint().as_deref(), Some("3333"));
+        let same = config(&[("AX_ANTHROPIC_API_KEY", "k-9999"), ("AX_ANTHROPIC_API_KEY_WORK", "k-9999")]).unwrap();
+        assert_eq!(same.ai.anthropic.hint().as_deref(), Some("9999"));
     }
 
     #[test]

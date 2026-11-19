@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 첨부(`uploadAttachment`), 임시 저장(`listDrafts`, `createDraft`, `getDraft`, `updateDraft`, `deleteDraft`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`), 대시보드와 배포 일정(`dashboard`, `releases`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 9개(운영자의 AI 설정·가격·예산·사용량)도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 이 operation들, 그리고 실현 가능성 리포트를 쓰는 Claude 제공자입니다.
+> **현재 상태: 계약의 operation 46개를 모두 구현했습니다.** 로그인, 사용자·팀, 프로젝트, 요청과 상태 전이, 첨부, 임시 저장, 알림, 대시보드와 배포 일정, 그리고 운영자의 AI 예산·모델 설정·가격·사용량 보고가 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 다음은 실현 가능성 리포트를 쓰는 Claude 제공자, 그다음 AI 사전 점검입니다.
 
 ## 계약을 맞추는 방법
 
@@ -121,7 +121,7 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
     - 각 요청은 실제로 반영된 날에 놓이고, 아직 반영되지 않았으면 예정일에 놓입니다.
     - 요청마다 보는 사람이 그 요청을 열 수 있는지 알려 줍니다.
   - 날짜와 달은 모두 업무 달력(`AX_TIME_ZONE`) 기준입니다.
-  - AI 사용량과 예산을 서버에 저장하기 전까지 AI 비용 항목은 0(한도 없음)입니다.
+  - AI 비용 항목은 그달에 기록된 AI 사용 금액과 월 한도입니다.
 - 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
 - **첨부.** `uploadAttachment`(`request:create`)는 multipart 필드 `file`을 받아 무작위 id로 `AX_UPLOAD_DIR`에 저장합니다. 10MB까지 받습니다. 파일이 없거나 한도를 넘으면 `400`이고, 목 API처럼 권한보다 먼저 검사합니다. 올린 사람만 요청에 붙일 수 있고, 요청에는 첨부마다 한 번씩, 보낸 순서대로 들어갑니다.
   - 계약에는 내려받기 operation이 없고, `<img>`는 bearer 토큰을 보낼 수 없습니다. 그래서 `Attachment.url`은 계약 밖의 유일한 경로인 `GET /files/{id}`로 가는 서명 링크입니다. id와 만료 시각의 HMAC이고, 서버가 첨부를 보여 줄 때마다 새로 만들며, 12~24시간 동안 쓸 수 있습니다. 바뀌었거나 만료된 링크는 `404`입니다. 키는 처음 시작할 때 만들어 데이터베이스(`server_secrets`)에 두므로 따로 설정할 비밀값이 없습니다.
@@ -131,6 +131,22 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 같은 `clientId`로 다시 만들면 처음 만든 초안을 지금 상태 그대로 돌려줍니다. 한 사람이 `AX_DRAFTS_PER_ACCOUNT`개(20)까지 저장할 수 있고, 하나 더 저장하면 `409 limit_reached`입니다. 저장하는 동안 계정 행을 잠가서 두 저장이 마지막 자리를 함께 차지할 수 없습니다.
   - 수정할 때는 시작한 버전을 보냅니다. 그 사이 저장된 초안이면 `409 conflict`입니다. 확인과 쓰기는 잠긴 행에서 합니다.
   - `draftId`로 요청을 접수하면 같은 트랜잭션에서 그 초안을 지웁니다.
+
+## AI 설정, 예산, 사용량
+
+이 기능은 서비스 운영자(`operator`, CLI로만 만듭니다)의 것입니다. 필요한 권한은 `budget:manage`, `agent:manage`, `usage:view`입니다.
+
+- **제공자 키는 설정으로만 받습니다.** `AX_ANTHROPIC_API_KEY`를 쓰거나, 작업마다 키를 따로 둡니다(`AX_ANTHROPIC_API_KEY_PRECHECK`, `_REPORT`, `_WORK`). 키를 나누면 제공자 콘솔에서 작업별 지출을 키별로 볼 수 있습니다. `getAiSettings`는 연결된 제공자를 키의 마지막 네 글자와 함께 보여 줍니다. `setProviderKey`와 `removeProviderKey`는 API로 운영자를 만들 때처럼 `403`입니다. 연결할 수 있는 제공자는 Anthropic뿐입니다. OpenAI는 계약에 남아 있지만 여기서는 연결되지 않습니다.
+- **작업별 모델**(`getAiSettings`, `updateAiSettings`): `precheck`, `report`, `work`마다 기본 모델을 두고, 프로젝트별로 바꿀 수 있습니다. 고른 모델은 연결된 제공자의 것이어야 하고 가격이 있어야 합니다(`400`). 없는 프로젝트나, 한 프로젝트에 같은 작업을 두 번 지정하면 `400`입니다. AI 작업은 쓴 에이전트와 모델을 기록합니다(`work.agent`).
+- **가격**(`getAiPricing`, `updateAiPricing`): 백만 토큰당 USD(입력, 캐시 읽기, 캐시 쓰기, 출력)와 환율입니다. 쓰고 있는 모델은 뺄 수 없습니다(`409`). 새 가격은 그 뒤 기록되는 사용량부터 적용되고, 이미 기록된 사용량은 기록할 때의 가격을 유지합니다.
+- **예산**(`getBudget`, `updateBudget`): 월 한도, 요청당 한도(월 한도를 정했다면 그보다 클 수 없음), 경고 임계값입니다. 금액은 원 단위 정수이고, `0`은 한도 없음입니다. 새 서버는 한도 없음으로 시작합니다.
+  - 목 API처럼 월 한도는 보여 주기만 하고 막지는 않습니다.
+  - 요청당 한도는 실제로 막습니다. 요청에 기록된 AI 비용이 한도에 닿으면, 운영자가 한도를 올릴 때까지 `runWork`, `requestRevision`, `reviseScope`가 `409 guard_failed`입니다. 개발자의 질문에 답하는 일은 막지 않습니다.
+- **사용량**(`aiUsage`, `?month=YYYY-MM`): 모델 호출이나 에이전트 실행 한 번마다 장부(`ai_usage`)에 한 줄을 남깁니다.
+  - 기록할 때의 가격으로 계산하고, 그 작업을 시작한 사람과 그 순간 그 사람이 속한 팀에 기록합니다.
+  - 보고서는 제공자, 모델, 작업, 날짜, 요청(상위 10개), 팀, 사람별로 목 API와 같은 방식으로 합산합니다.
+  - 요청 화면은 전체 리포트를 볼 수 있는 사람(`report:read`)에게 그 요청의 사용량을 보여 줍니다.
+- 설정은 `ai_config`에 항목마다 JSON 문서 하나로 둡니다. 없는 항목은 템플릿 기본값(`src/config/ai.ts`)을 씁니다. precheck는 Haiku, report와 work는 Opus이고, 가격표는 템플릿의 것을 쓰며 환율은 임시값입니다. 쓰기는 advisory lock 하나를 잡으므로, 가격을 빼는 일과 그 모델을 고르는 일이 엇갈리지 않습니다.
 
 ## 설정
 
@@ -144,6 +160,8 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_SESSION_IDLE` | `24h` | 이 시간 동안 쓰지 않으면 로그인이 끝납니다(`s`, `m`, `h`, `d`) |
 | `AX_SESSION_MAX` | `7d` | 얼마나 쓰든 로그인한 뒤 이 시간이 지나면 끝납니다 |
 | `AX_SETUP_LINK_TTL` | `72h` | 일회용 설정 링크가 유효한 시간 |
+| `AX_ANTHROPIC_API_KEY` | 없음 | 모든 AI 작업에 쓰는 Claude Platform 키. API로는 절대 돌려주지 않고, 콘솔에는 마지막 네 글자만 보입니다. |
+| `AX_ANTHROPIC_API_KEY_PRECHECK`, `AX_ANTHROPIC_API_KEY_REPORT`, `AX_ANTHROPIC_API_KEY_WORK` | 없음 | 한 작업에만 쓰는 키. 그 작업에는 `AX_ANTHROPIC_API_KEY` 대신 이 키를 씁니다. |
 | `AX_AI_PROVIDER` | `stub` | 리포트를 쓰고 작업을 하는 제공자. 지금은 `stub`만 쓸 수 있습니다 |
 | `AX_SCOPE_CHECK` | `true` | 구현 가능 또는 조건부 리포트가 나오면, 개발자 검토 전에 요청자가 AI가 이해한 범위를 확인합니다. 프런트엔드의 `appConfig.workflow.scopeCheck`와 같은 값으로 둡니다. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |

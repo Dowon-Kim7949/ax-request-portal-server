@@ -14,7 +14,8 @@ use super::lifecycle::{Event, Status};
 use super::precheck;
 use super::store::{self, Actor, StoredRequest, iso};
 use crate::ai;
-use crate::attachments::{self, Attachment, Files};
+use crate::ai::{settings, usage};
+use crate::attachments::{self, Attachment};
 use crate::auth::{self, CurrentUser};
 use crate::error::{ApiError, Issue};
 use crate::lang::Lang;
@@ -35,19 +36,27 @@ pub fn parse_id(value: &str) -> Option<i64> {
 }
 
 /// The request as the person may see it: attachments with fresh download
-/// links, and `aiUsage` only with `report:read`. Until AI usage is recorded (a
-/// later step) it is empty, with no limit.
-pub fn present(user: &User, request: &StoredRequest, files: &Files) -> Value {
+/// links, and `aiUsage` (what the AI has cost on it, against the per-request
+/// limit) only with `report:read`.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn present(state: &AppState, user: &User, request: &StoredRequest, lang: Lang) -> Result<Value, ApiError> {
     let mut json = request.to_json();
     if let Some(attachments) = json.get_mut("attachments").and_then(Value::as_array_mut) {
         for attachment in attachments {
-            *attachment = files.present(attachment);
+            *attachment = state.files.present(attachment);
         }
     }
     if user.role.can(Permission::ReportRead) {
-        json["aiUsage"] = json!({ "spentKrw": 0, "limitKrw": 0, "entries": [] });
+        let mut conn = state.db(lang)?.acquire().await.map_err(ApiError::db(lang))?;
+        let limits = settings::budget(&mut conn).await.map_err(ApiError::db(lang))?;
+        let entries =
+            usage::for_request(&mut conn, &state.time_zone.0, request.id).await.map_err(ApiError::db(lang))?;
+        json["aiUsage"] = usage::request_usage(&entries, &limits);
     }
-    json
+    Ok(json)
 }
 
 /// `POST /requests` (`request:create`): files the request. It starts as
@@ -136,7 +145,7 @@ pub async fn create(
     let request = StoredRequest::find(&mut tx, id).await.map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
     let request = request.ok_or_else(|| ApiError::internal(lang))?;
-    Ok((StatusCode::CREATED, Json(present(user, &request, &state.files))))
+    Ok((StatusCode::CREATED, Json(present(&state, user, &request, lang).await?)))
 }
 
 /// The JSONB part of a new request: everything but the columns, keys left out
@@ -237,7 +246,7 @@ pub async fn get(
     if !request.can_read(&current.user, &owners) {
         return Err(ApiError::request_not_found(lang, id));
     }
-    Ok(Json(present(&current.user, &request, &state.files)))
+    Ok(Json(present(&state, &current.user, &request, lang).await?))
 }
 
 /// `GET /requests?scope&status&projectId&q`: summaries, most recently changed

@@ -22,7 +22,7 @@ use crate::error::ApiError;
 use crate::implemented::IMPLEMENTED;
 use crate::lang::Lang;
 use crate::state::AppState;
-use crate::{attachments, auth};
+use crate::{ai, attachments, auth};
 use crate::{dashboard, drafts, notifications, projects, requests, teams, users};
 
 /// The whole application.
@@ -115,6 +115,15 @@ fn implemented(id: &str) -> Option<AddHandler> {
         },
         "dashboard" => |methods, filter| methods.on(filter, dashboard::summary),
         "releases" => |methods, filter| methods.on(filter, dashboard::releases),
+        "getBudget" => |methods, filter| methods.on(filter, ai::handlers::get_budget),
+        "updateBudget" => |methods, filter| methods.on(filter, ai::handlers::update_budget),
+        "getAiSettings" => |methods, filter| methods.on(filter, ai::handlers::get_settings),
+        "updateAiSettings" => |methods, filter| methods.on(filter, ai::handlers::update_settings),
+        "setProviderKey" => |methods, filter| methods.on(filter, ai::handlers::set_provider_key),
+        "removeProviderKey" => |methods, filter| methods.on(filter, ai::handlers::remove_provider_key),
+        "getAiPricing" => |methods, filter| methods.on(filter, ai::handlers::get_pricing),
+        "updateAiPricing" => |methods, filter| methods.on(filter, ai::handlers::update_pricing),
+        "aiUsage" => |methods, filter| methods.on(filter, ai::handlers::report),
         _ => return None,
     })
 }

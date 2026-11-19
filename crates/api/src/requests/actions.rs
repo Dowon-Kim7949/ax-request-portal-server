@@ -48,7 +48,7 @@ pub async fn save_verification(
     request.details.insert("verification".into(), verification);
     request.save(&mut tx).await.map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request, &state.files)))
+    Ok(Json(present(&state, user, &request, lang).await?))
 }
 
 /// `PUT /requests/{id}/preview-feedback`: the requester's reaction to the AI's
@@ -93,7 +93,7 @@ pub async fn preview_feedback(
         .await
         .map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request, &state.files)))
+    Ok(Json(present(&state, user, &request, lang).await?))
 }
 
 /// `PUT /requests/{id}/regression`: a responsible developer records regression
@@ -126,7 +126,7 @@ pub async fn update_regression(
     }
     request.save(&mut tx).await.map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request, &state.files)))
+    Ok(Json(present(&state, user, &request, lang).await?))
 }
 
 /// `PUT /requests/{id}/release`: a responsible developer sets the planned
@@ -188,7 +188,7 @@ pub async fn update_release(
         .map_err(ApiError::db(lang))?;
     }
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request, &state.files)))
+    Ok(Json(present(&state, user, &request, lang).await?))
 }
 
 /// `GET /regression-checks` (`regression:view`): open requests with regression

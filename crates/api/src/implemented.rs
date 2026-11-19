@@ -45,6 +45,15 @@ pub const IMPLEMENTED: &[&str] = &[
     "updateNotificationSettings",
     "dashboard",
     "releases",
+    "getBudget",
+    "updateBudget",
+    "getAiSettings",
+    "updateAiSettings",
+    "setProviderKey",
+    "removeProviderKey",
+    "getAiPricing",
+    "updateAiPricing",
+    "aiUsage",
 ];
 
 #[cfg(test)]

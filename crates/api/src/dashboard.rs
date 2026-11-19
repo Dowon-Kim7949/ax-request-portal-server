@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+use crate::ai::{settings, usage};
 use crate::auth::{self, CurrentUser};
 use crate::calendar::{add_days, is_year_month, previous_month};
 use crate::error::{ApiError, Issue};
@@ -21,10 +22,6 @@ use crate::requests::store;
 use crate::roles::Permission;
 use crate::state::AppState;
 use crate::users::User;
-
-/// The alert threshold reported until budgets are kept on the server (the
-/// mock's default budget). No monthly limit (`0`) and no spending until then.
-pub const DEFAULT_ALERT_THRESHOLD_PCT: u8 = 80;
 
 /// One request, as these summaries need it, its instants already turned into
 /// business dates.
@@ -183,9 +180,13 @@ pub async fn summary(
         let average = leads.iter().sum::<f64>() / leads.len() as f64;
         out.insert("avgLeadTimeDays".into(), json!((average * 10.0).round() / 10.0));
     }
-    out.insert("aiCostKrw".into(), json!(0));
-    out.insert("aiBudgetKrw".into(), json!(0));
-    out.insert("aiAlertThresholdPct".into(), json!(DEFAULT_ALERT_THRESHOLD_PCT));
+    // The month's AI spending against the monthly limit (0 = no limit).
+    let mut conn = db.acquire().await.map_err(ApiError::db(lang))?;
+    let limits = settings::budget(&mut conn).await.map_err(ApiError::db(lang))?;
+    let spent = usage::in_month(&mut conn, tz, &month).await.map_err(ApiError::db(lang))?;
+    out.insert("aiCostKrw".into(), json!(usage::month_spent_krw(&spent)));
+    out.insert("aiBudgetKrw".into(), json!(limits.monthly_limit_krw));
+    out.insert("aiAlertThresholdPct".into(), json!(limits.alert_threshold_pct));
     out.insert("byProject".into(), Value::Array(by_project));
     out.insert(
         "upcomingReleases".into(),

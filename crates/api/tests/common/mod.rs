@@ -12,6 +12,7 @@ use tower::ServiceExt;
 
 use ax_api::accounts::{self, NewAccount};
 use ax_api::attachments::Files;
+use ax_api::config::AiSettings;
 use ax_api::roles::Role;
 use ax_api::users::User;
 use ax_api::{AppState, Config, router};
@@ -25,12 +26,29 @@ pub fn files() -> Files {
 }
 
 pub fn app(pool: &PgPool) -> Router {
+    app_with(pool, AiSettings::default())
+}
+
+/// The app with these AI settings (provider keys, scope check).
+pub fn app_with(pool: &PgPool, ai: AiSettings) -> Router {
     let config = Config::from_lookup(|_| None).unwrap();
-    router(AppState { db: Some(pool.clone()), files: files(), ..AppState::default() }, &config)
+    router(AppState { db: Some(pool.clone()), files: files(), ai, ..AppState::default() }, &config)
 }
 
 pub async fn send(
     pool: &PgPool,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+    lang: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    send_to(app(pool), method, path, token, lang, body).await
+}
+
+/// [`send`] to a given app.
+pub async fn send_to(
+    app: Router,
     method: &str,
     path: &str,
     token: Option<&str>,
@@ -42,7 +60,7 @@ pub async fn send(
         request = request.header("authorization", format!("Bearer {token}"));
     }
     let body = body.map_or_else(Body::empty, |b| Body::from(b.to_string()));
-    let response = app(pool).oneshot(request.header("content-type", "application/json").body(body).unwrap()).await;
+    let response = app.oneshot(request.header("content-type", "application/json").body(body).unwrap()).await;
     let response = response.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
