@@ -2,7 +2,7 @@
 
 use sqlx::PgPool;
 
-use crate::config::{BusinessTimeZone, SessionPolicy, SetupLinkPolicy};
+use crate::config::{AiSettings, BusinessTimeZone, SessionPolicy, SetupLinkPolicy};
 use crate::error::ApiError;
 use crate::lang::Lang;
 
@@ -13,6 +13,7 @@ pub struct AppState {
     pub sessions: SessionPolicy,
     pub setup_links: SetupLinkPolicy,
     pub time_zone: BusinessTimeZone,
+    pub ai: AiSettings,
 }
 
 impl AppState {

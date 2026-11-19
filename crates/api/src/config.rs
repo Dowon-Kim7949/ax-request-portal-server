@@ -9,6 +9,8 @@
 //! | `AX_SESSION_MAX`  | `7d`           | ...and this long after signing in, however much it is used |
 //! | `AX_SETUP_LINK_TTL` | `72h`        | How long a one-time setup link works                       |
 //! | `AX_TIME_ZONE`    | `Asia/Seoul`   | The business calendar: "today", due dates, monthly totals  |
+//! | `AX_AI_PROVIDER`  | `stub`         | Who writes reports and runs work (`stub` until one is wired)|
+//! | `AX_SCOPE_CHECK`  | `true`         | The requester confirms the AI's reading before review      |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -27,6 +29,25 @@ pub struct Config {
     pub sessions: SessionPolicy,
     pub setup_links: SetupLinkPolicy,
     pub time_zone: BusinessTimeZone,
+    pub ai: AiSettings,
+}
+
+/// How the AI's jobs run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiSettings {
+    /// `stub`: writes an honest "no AI provider" report and work result, so
+    /// the lifecycle can be used end to end before a provider is wired.
+    pub provider: String,
+    /// The frontend's `appConfig.workflow.scopeCheck`: after a feasible or
+    /// conditional report the requester confirms the AI's reading of the
+    /// request (`scope_check`) before a developer reviews it.
+    pub scope_check: bool,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self { provider: "stub".to_owned(), scope_check: true }
+    }
 }
 
 /// The time zone of the business calendar (IANA name): what "today" is for
@@ -143,8 +164,20 @@ impl Config {
         let setup_links = SetupLinkPolicy { ttl: duration("AX_SETUP_LINK_TTL", SetupLinkPolicy::default().ttl)? };
 
         let time_zone = non_empty("AX_TIME_ZONE").map_or_else(BusinessTimeZone::default, BusinessTimeZone);
+        let provider = non_empty("AX_AI_PROVIDER").unwrap_or_else(|| "stub".to_owned());
+        if provider != "stub" {
+            return Err(ConfigError(format!(
+                "AX_AI_PROVIDER must be stub (the only provider so far), got {provider:?}"
+            )));
+        }
+        let scope_check = match non_empty("AX_SCOPE_CHECK").as_deref() {
+            None | Some("true") => true,
+            Some("false") => false,
+            Some(other) => return Err(ConfigError(format!("AX_SCOPE_CHECK must be true or false, got {other:?}"))),
+        };
+        let ai = AiSettings { provider, scope_check };
 
-        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links, time_zone })
+        Ok(Self { bind, base_path, database_url: non_empty("DATABASE_URL"), sessions, setup_links, time_zone, ai })
     }
 }
 
@@ -169,6 +202,10 @@ mod tests {
         assert_eq!(c.sessions.max, Duration::from_secs(7 * 24 * 3600));
         assert_eq!(c.setup_links.ttl, Duration::from_secs(72 * 3600));
         assert_eq!(c.time_zone.0, "Asia/Seoul");
+        assert_eq!(c.ai, AiSettings { provider: "stub".into(), scope_check: true });
+        assert!(!config(&[("AX_SCOPE_CHECK", "false")]).unwrap().ai.scope_check);
+        assert!(config(&[("AX_SCOPE_CHECK", "no")]).is_err());
+        assert!(config(&[("AX_AI_PROVIDER", "magic")]).is_err());
         assert_eq!(config(&[("AX_TIME_ZONE", "Europe/Berlin")]).unwrap().time_zone.0, "Europe/Berlin");
         assert_eq!(config(&[("AX_SETUP_LINK_TTL", "2d")]).unwrap().setup_links.ttl, Duration::from_secs(48 * 3600));
         assert!(config(&[("AX_SETUP_LINK_TTL", "soon")]).is_err());

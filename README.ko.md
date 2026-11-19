@@ -9,7 +9,7 @@ AI와 함께 일하는 업무 요청 포털 **[AX Request Portal](https://github
 
 두 저장소는 하나의 계약으로 만납니다. 계약의 주인은 프런트엔드입니다. `src/api/contract.ts`가 `docs/openapi.json`, 목 API, 타입 클라이언트를 만듭니다. 이 서버는 그 문서를 고정한 프런트엔드 커밋에서 바이트 그대로 복사해 구현합니다. 어느 쪽도 상대의 코드를 가져다 쓰지 않습니다.
 
-> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`)이 PostgreSQL과 함께 동작합니다. 나머지 operation 17개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
+> **현재 상태: 로그인, 사용자·팀, 프로젝트.** 로그인(`login`, `me`, `logout`, `completeSetup`), 사용자·팀(`listUsers`, `createUser`, `updateUser`, `createSetupLink`, `listTeams`, `createTeam`, `updateTeam`), 프로젝트(`listProjects`, `createProject`, `updateProject`), 요청(`createRequest`, `getRequest`, `listRequests`, `precheckRequest`), 요청 상태 전이(`transitionRequest`, `saveVerification`, `sendPreviewFeedback`, `updateRegression`, `updateRelease`, `regressionQueue`), 알림(`listNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationSettings`, `updateNotificationSettings`)이 PostgreSQL과 함께 동작합니다. AI가 하는 두 가지 작업은 백그라운드 워커에서 돌고, 실제 AI 제공자를 연결하기 전까지는 스텁 제공자가 맡습니다. 나머지 operation 17개도 연결돼 있고, 구현되기 전까지는 계약의 오류 형식으로 `501`을 돌려줍니다. 다음은 요청 상태 전이, 드래프트, 그리고 AI 작업 두 가지(실현 가능성 리포트, MR까지의 AI 작업)입니다.
 
 ## 계약을 맞추는 방법
 
@@ -106,6 +106,12 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
   - 설정으로 앱 알림을 끄거나, 조치가 필요한 알림만 받을 수 있습니다.
   - 한 사람당 최근 200개까지만 남깁니다.
   - 실제로 보내는 것은 앱 알림뿐입니다. 이메일과 메신저 설정은 그 채널을 보내는 백엔드를 위해 저장만 합니다.
+- **AI 작업.** 요청이 `reporting`이 되면 리포트 작업이, `in_progress`가 되면 구현 작업이 큐(`ai_jobs`)에 들어갑니다.
+  - 백그라운드 워커가 처리할 차례가 된 작업을 가져갑니다. `FOR UPDATE SKIP LOCKED`로 가져가므로 서버를 여러 대 띄워도 한 작업을 두 번 처리하지 않습니다.
+  - AI 제공자는 트랜잭션 밖에서 호출합니다. 결과는 AI 자신의 이벤트(`reportReady`, `workFinished`)로 반영합니다. 구현 가능 또는 조건부 리포트라 요청자의 확인이 필요하면 `reportReady` 대신 `scopeReady`를 씁니다. 결과를 반영하는 건 요청이 작업을 시작할 때의 상태 그대로일 때뿐입니다.
+  - 실패한 작업은 30초 뒤, 60초 뒤 두 번 더 시도합니다. 그래도 실패하면 사람이 처리하도록 남겨 둡니다.
+  - AI는 사람의 이벤트를 보내지 않습니다. 그래서 머지를 승인하거나, 검토를 건너뛰거나, 사람이 확인할 단계를 넘길 수 없습니다.
+- 지금 있는 제공자는 `stub`뿐입니다. 작업을 넣은 사람의 언어로 "AI 제공자가 연결되지 않았다"고 알립니다. 가능성은 판단하지 않고(`undetermined`) 코드도 바꾸지 않습니다(`outcome: error`). 그래서 개발자가 직접 판단하면서 상태 전이 전체를 끝까지 쓸 수 있습니다.
 - 목록에서 거르는 값은 컬럼에, 계약의 `WorkRequest` 나머지는 JSONB 하나에 둡니다. 타임라인은 추가만 하는 별도 테이블입니다. 요청 번호는 1부터 시작합니다.
 
 ## 설정
@@ -120,6 +126,8 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_SESSION_IDLE` | `24h` | 이 시간 동안 쓰지 않으면 로그인이 끝납니다(`s`, `m`, `h`, `d`) |
 | `AX_SESSION_MAX` | `7d` | 얼마나 쓰든 로그인한 뒤 이 시간이 지나면 끝납니다 |
 | `AX_SETUP_LINK_TTL` | `72h` | 일회용 설정 링크가 유효한 시간 |
+| `AX_AI_PROVIDER` | `stub` | 리포트를 쓰고 작업을 하는 제공자. 지금은 `stub`만 쓸 수 있습니다 |
+| `AX_SCOPE_CHECK` | `true` | 구현 가능 또는 조건부 리포트가 나오면, 개발자 검토 전에 요청자가 AI가 이해한 범위를 확인합니다. 프런트엔드의 `appConfig.workflow.scopeCheck`와 같은 값으로 둡니다. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |
 | `RUST_LOG` | `info` | 로그 필터 |
 

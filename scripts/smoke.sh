@@ -96,6 +96,14 @@ r="$(call -X POST -d "$req" "$WEB/api/requests")"
 request_id="$(json "$r" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')"
 [[ "$(code "$(call "$WEB/api/requests/$request_id")")" == "200" ]] || fail "getRequest #$request_id"
 call "$WEB/api/requests?scope=mine" | grep -q "\"title\":\"Smoke request $stamp\"" || fail "listRequests does not list the new request"
+# The AI worker (the stub provider until one is wired) writes the report.
+for _ in $(seq 1 15); do
+  r="$(call "$WEB/api/requests/$request_id")"
+  grep -q '"status":"review"' <<<"$r" && break
+  sleep 1
+done
+grep -q '"status":"review"' <<<"$r" && grep -q '"verdict":"undetermined"' <<<"$r" ||
+  fail "the AI worker did not report on request #$request_id: $r"
 r="$(call -X POST -d '{"event":"cancel","reason":"smoke test"}' "$WEB/api/requests/$request_id/transitions")"
 [[ "$(code "$r")" == "200" ]] && grep -q '"status":"cancelled"' <<<"$r" || fail "transitionRequest (cancel): $r"
 [[ "$(code "$(call "$WEB/api/notifications")")" == "200" ]] || fail "listNotifications"
@@ -123,4 +131,4 @@ r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"rol
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, a request (then cancelled it) and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"
