@@ -52,6 +52,21 @@ pub fn guard_failed(lang: Lang, guard: Guard) -> ApiError {
     keyed(ErrorCode::GuardFailed, lang, ko, en)
 }
 
+/// `409 guard_failed`: the request has spent its per-request AI limit, so no
+/// AI run may start again (`requestBudgetExceeded`).
+pub fn request_budget_exceeded(lang: Lang, limit: i64) -> ApiError {
+    let limit = crate::error::thousands(limit);
+    let message = match lang {
+        Lang::Ko => format!(
+            "이 요청의 AI 비용이 요청당 한도({limit}원)에 도달해 AI 작업을 더 실행할 수 없습니다. 운영자가 한도를 올리거나 직접 처리해 주세요."
+        ),
+        Lang::En => format!(
+            "This request has used its per-request AI budget (₩{limit}), so AI work cannot run again. Ask an operator to raise the limit, or handle it by hand."
+        ),
+    };
+    ApiError::new(ErrorCode::GuardFailed, message)
+}
+
 pub fn requester_only_verify(lang: Lang) -> ApiError {
     keyed(ErrorCode::Forbidden, lang, "요청자만 결과를 확인할 수 있습니다.", "Only the requester can check the result.")
 }

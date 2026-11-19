@@ -7,7 +7,10 @@
 //! it cannot approve a merge, skip a review or move a request past a human
 //! checkpoint.
 
+pub mod handlers;
 pub mod jobs;
+pub mod settings;
+pub mod usage;
 
 use std::future::Future;
 

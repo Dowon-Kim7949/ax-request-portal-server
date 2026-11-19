@@ -20,7 +20,7 @@ use super::errors;
 use super::handlers::{parse_id, present};
 use super::lifecycle::{Event, Guard, Party, SCOPE_REVISIONS_MAX, Status};
 use super::store::{self, Actor, StoredRequest, field};
-use crate::ai;
+use crate::ai::{self, settings, usage};
 use crate::auth::CurrentUser;
 use crate::error::ApiError;
 use crate::lang::Lang;
@@ -52,14 +52,36 @@ pub async fn transition(
         return Err(errors::invalid_transition(lang));
     }
     check_guards(&request, &command).map_err(|guard| errors::guard_failed(lang, guard))?;
-    // The per-request AI budget guard (runWork, requestRevision, reviseScope)
-    // joins once AI usage is recorded; until then nothing has been spent.
+    // Each of these starts an AI run someone chose to repeat, so each stops at
+    // the per-request limit. Answering a developer's question (provideInfo)
+    // also rewrites the report but is never refused, or the requester would be
+    // stuck.
+    if matches!(event, Event::RunWork | Event::RequestRevision | Event::ReviseScope) {
+        let limits = settings::budget(&mut tx).await.map_err(ApiError::db(lang))?;
+        let entries = usage::for_request(&mut tx, &state.time_zone.0, id).await.map_err(ApiError::db(lang))?;
+        if limits.request_over_limit(usage::spent_krw(&entries)) {
+            return Err(errors::request_budget_exceeded(lang, limits.per_request_limit_krw));
+        }
+    }
 
     let at = store::now_iso(&mut *tx).await.map_err(ApiError::db(lang))?;
     let from = request.status;
     apply(&mut request, &command, user.id, &at);
-    if matches!(event, Event::RunWork | Event::RequestRevision) && request.assignee_id.is_none() {
-        request.assignee_id = Some(user.id);
+    if matches!(event, Event::RunWork | Event::RequestRevision) {
+        if request.assignee_id.is_none() {
+            request.assignee_id = Some(user.id);
+        }
+        // The coding agent and model this run uses, as the settings say now.
+        let selections = settings::selections(&mut tx).await.map_err(ApiError::db(lang))?;
+        let selection = selections.resolve(&request.project_id.to_string(), "work");
+        let agent = json!({
+            "provider": selection.provider,
+            "model": selection.model,
+            "runtime": settings::runtime_for("work", &selection.provider),
+        });
+        if let Some(work) = request.details.get_mut("work").and_then(Value::as_object_mut) {
+            work.insert("agent".into(), agent);
+        }
     }
     let note = command.note();
     store::add_event(
@@ -80,7 +102,7 @@ pub async fn transition(
         .await
         .map_err(ApiError::db(lang))?;
     tx.commit().await.map_err(ApiError::db(lang))?;
-    Ok(Json(present(user, &request, &state.files)))
+    Ok(Json(present(&state, user, &request, lang).await?))
 }
 
 /// The request, locked, with its project's owners; `404` when it does not

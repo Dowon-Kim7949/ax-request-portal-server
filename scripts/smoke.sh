@@ -150,7 +150,25 @@ r="$(call -X PATCH -d '{"active":false,"teamId":null}' "$WEB/api/users/$member_i
 r="$(call -X POST -d "{\"name\":\"Op\",\"email\":\"op-$stamp@example.com\",\"role\":\"operator\"}" "$WEB/api/users")"
 [[ "$(code "$r")" == "403" ]] || fail "an admin must not create an operator: $r"
 
+# The service operator (made with the CLI) sees the AI budget, settings and usage.
+op_email="smoke-op-$stamp@example.com"
+op_password="$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n')"
+printf '%s\n' "$op_password" | "${AX_CLI[@]}" user create --email "$op_email" --name "Smoke Operator" --role operator --password-stdin \
+  >/dev/null || fail "could not provision an operator with the CLI"
+op_token="$(login "{\"email\":\"$op_email\",\"password\":\"$op_password\"}" | field token)"
+op() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $op_token" -H 'Content-Type: application/json' -H 'Accept-Language: en' "$@"; }
+r="$(op "$WEB/api/budget")"
+[[ "$(code "$r")" == "200" ]] && grep -q '"spentKrw":' <<<"$r" || fail "getBudget: $r"
+r="$(op "$WEB/api/ai/settings")"
+[[ "$(code "$r")" == "200" ]] && grep -q '"providers":' <<<"$r" || fail "getAiSettings: $r"
+[[ "$(code "$(op "$WEB/api/ai/pricing")")" == "200" ]] || fail "getAiPricing"
+r="$(op "$WEB/api/ai/usage")"
+[[ "$(code "$r")" == "200" ]] && grep -q '"calls":' <<<"$r" || fail "aiUsage: $r"
+[[ "$(code "$(op -X PUT -d '{"apiKey":"sk-not-taken-here"}' "$WEB/api/ai/providers/anthropic/key")")" == "403" ]] ||
+  fail "provider keys must come only from the configuration"
+[[ "$(code "$(call "$WEB/api/budget")")" == "403" ]] || fail "an admin must not see the AI budget"
+
 [[ "$(status -X POST -H "Authorization: Bearer $token" "$WEB/api/auth/logout")" == "204" ]] || fail "logout must be 204"
 [[ "$(me "$token")" == "401" ]] || fail "the token must stop working after logout"
 
-echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, an attachment, a draft, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; signed out)"
+echo "stack OK: $WEB -> $API (signed in as $email; added a team, a project, an attachment, a draft, a request (reported on by the AI worker, then cancelled) and a person, who set a password through a setup link; an operator read the AI budget, settings and usage; signed out)"

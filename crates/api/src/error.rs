@@ -276,6 +276,46 @@ impl ApiError {
         )
     }
 
+    /// `400`: a selection names a provider without a key (the mock's `providerNotConnected`).
+    pub fn provider_not_connected(lang: Lang, provider: &str) -> Self {
+        let name = provider_name(provider);
+        let message = match lang {
+            Lang::Ko => format!("{name}가 연결되어 있지 않습니다. 먼저 API 키를 등록해 주세요."),
+            Lang::En => format!("{name} is not connected. Add its API key first."),
+        };
+        Self::new(ErrorCode::BadRequest, message)
+    }
+
+    /// `400`: a selection names a model the price table lacks (the mock's `modelNotPriced`).
+    pub fn model_not_priced(lang: Lang, model: &str) -> Self {
+        let message = match lang {
+            Lang::Ko => format!("단가표에 없는 모델입니다: {model}"),
+            Lang::En => format!("This model is not in the price table: {model}"),
+        };
+        Self::new(ErrorCode::BadRequest, message)
+    }
+
+    /// `409 guard_failed`: a new price table would drop a model in use (the mock's `modelInUse`).
+    pub fn model_in_use(lang: Lang, model: &str) -> Self {
+        let message = match lang {
+            Lang::Ko => format!("지금 쓰고 있는 모델({model})은 단가표에서 뺄 수 없습니다."),
+            Lang::En => format!("A model in use ({model}) cannot be removed from the price table."),
+        };
+        Self::new(ErrorCode::GuardFailed, message)
+    }
+
+    /// `403`: provider keys are set in the server's configuration, never
+    /// through the API (this server's rule; the mock API keeps keys itself).
+    pub fn provider_keys_from_config(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::Forbidden,
+            lang.pick(
+                "AI 제공자 키는 서버 설정에서 관리합니다. 여기서 등록하거나 지울 수 없습니다.",
+                "Provider keys are managed in the server's configuration and cannot be added or removed here.",
+            ),
+        )
+    }
+
     /// `404` (the mock's `userNotFound`).
     pub fn user_not_found(lang: Lang) -> Self {
         Self::new(ErrorCode::NotFound, lang.pick("사용자를 찾을 수 없습니다.", "User not found."))
@@ -322,6 +362,28 @@ impl ApiError {
     }
 }
 
+/// A provider as messages name it; brand names are not translated (the mock's `providerName`).
+pub fn provider_name(provider: &str) -> &str {
+    match provider {
+        "anthropic" => "Anthropic(Claude)",
+        "openai" => "OpenAI",
+        other => other,
+    }
+}
+
+/// `1234567` as `1,234,567` (`toLocaleString` in both `ko-KR` and `en-US`).
+pub fn thousands(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (self.status, Json(self.body)).into_response()
@@ -346,6 +408,14 @@ mod tests {
         for code in ErrorCode::ALL {
             assert_eq!(serde_json::to_value(code).unwrap(), code.as_str());
         }
+    }
+
+    #[test]
+    fn thousands_like_to_locale_string() {
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
+        assert_eq!(thousands(20_000), "20,000");
+        assert_eq!(thousands(10_000_000_000), "10,000,000,000");
     }
 
     #[test]
