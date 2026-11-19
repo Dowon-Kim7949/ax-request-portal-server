@@ -82,8 +82,13 @@ async fn serve(config: Config) -> Result<(), BoxError> {
     };
     let files = Files::new(&config.upload_dir, &config.public_path, file_key);
     if let Some(pool) = &db {
-        // The only provider so far (the configuration refuses any other).
-        ax_api::ai::jobs::spawn(pool.clone(), ax_api::ai::StubProvider, config.ai.clone());
+        // The configuration allows only these two.
+        if config.ai.provider == "anthropic" {
+            let claude = ax_api::ai::claude::ClaudeProvider::new(config.ai.anthropic.clone());
+            ax_api::ai::jobs::spawn(pool.clone(), claude, config.ai.clone());
+        } else {
+            ax_api::ai::jobs::spawn(pool.clone(), ax_api::ai::StubProvider, config.ai.clone());
+        }
         tracing::info!(provider = %config.ai.provider, "AI worker started");
     }
     let state = AppState {
