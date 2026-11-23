@@ -17,6 +17,7 @@ use common::*;
 
 fn with_key() -> AiSettings {
     AiSettings {
+        provider: "anthropic".to_owned(),
         anthropic: TaskKeys { default: Some(Secret::new("sk-ant-test-0000-ab12")), ..TaskKeys::default() },
         ..AiSettings::default()
     }
