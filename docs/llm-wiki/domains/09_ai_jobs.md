@@ -2,8 +2,8 @@
 title: AI Jobs
 tags:
   - llm-wiki
-  - needs-review
-status: needs_review
+  - verified
+status: verified
 doc_type: domain
 project: ax-request-portal-server
 last_updated: 2026-11-23
@@ -51,6 +51,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
+reviewed_by: Kim Dowon
+reviewed_at: 2026-11-23
 ---
 
 # AI Jobs
