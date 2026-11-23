@@ -60,7 +60,6 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
 - 비밀번호 추측은 이메일마다 제한합니다. `AX_LOGIN_LOCKOUT`(15분) 안에 `AX_LOGIN_ATTEMPTS`번(5번)을 넘게 실패하면, 잠금이 끝날 때까지 그 이메일의 로그인은 비밀번호가 맞아도 다시 시도할 시간을 알려 주는 `401`입니다. 시도는 비밀번호를 확인하기 전에 세므로 동시에 여러 번 추측해도 한도를 넘지 못하고, 없는 이메일도 똑같이 세므로 어떤 이메일이 있는지 드러나지 않습니다. 로그인에 성공하면 기록을 지웁니다. 이메일을 아는 사람이 추측을 계속해 잠금을 이어 갈 수는 있습니다. 그동안에도 관리자는 설정 링크를 보낼 수 있습니다.
 - 오류는 프런트엔드 목 API와 같습니다. 로그인 실패와 토큰이 없거나 모르거나 끝난 경우는 `401 unauthorized`, 권한이 없는 역할은 `403 forbidden`, 계약과 맞지 않는 본문은 `issues`가 붙은 `400 bad_request`입니다. 메시지는 `Accept-Language`를 따릅니다.
 - 역할과 권한은 프런트엔드의 `src/domain/roles.ts`(역할 5개, 권한 13개)와 같습니다. 운영자 계정은 관리자가 아니라 서비스가 만듭니다. CLI만 운영자를 만들 수 있습니다.
-- 계약과 다른 점이 하나 있습니다. 계약은 `login`의 응답으로 `200`과 `400`만 적었지만, 클라이언트가 기준으로 삼는 목 API처럼 로그인 실패는 `401`입니다. 고칠 곳은 프런트엔드의 `contract.ts`입니다.
 
 | 명령 | 하는 일 |
 | --- | --- |
@@ -193,7 +192,7 @@ Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설
 | `AX_RUNNER_TIMEOUT` | `30m` | (러너) 에이전트 실행 한 번에 허용하는 시간 |
 | `AX_RUNNER_WORKDIR` | 임시 디렉터리 | (러너) 클론을 두는 곳. 작업마다 디렉터리 하나를 쓰고 끝나면 지웁니다 |
 | `AX_CLAUDE_BIN` | `claude` | (러너) Claude Code 명령 |
-| `AX_AI_PROVIDER` | `stub` | 리포트를 쓰는 제공자: `stub`, 또는 `anthropic`(Claude, 키 필요). 작업 실행은 어느 쪽이든 코딩 에이전트를 기다립니다. |
+| `AX_AI_PROVIDER` | `stub` | 리포트를 쓰는 제공자: `stub`, 또는 `anthropic`(Claude, 키 필요). 둘 다 코드를 바꾸지 않으며, 작업 실행에는 러너(`AX_RUNNER_TOKEN`)가 필요합니다. 러너를 쓰면 리포트도 러너가 씁니다. |
 | `AX_SCOPE_CHECK` | `true` | 구현 가능 또는 조건부 리포트가 나오면, 개발자 검토 전에 요청자가 AI가 이해한 범위를 확인합니다. 프런트엔드의 `appConfig.workflow.scopeCheck`와 같은 값으로 둡니다. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | 업무 달력의 시간대(IANA 이름). 희망일과 배포일, 지연, 월별 합계를 계산할 때 "오늘"의 기준입니다. 프런트엔드의 `appConfig.organization.timeZone`과 같은 값으로 둡니다. PostgreSQL이 모르는 이름이면 서버가 시작되지 않습니다. |
 | `AX_DRAFTS_PER_ACCOUNT` | `20` | 한 사람이 저장할 수 있는 초안 수. 프런트엔드의 `drafts.maxPerAccount`와 같은 값으로 둡니다. |

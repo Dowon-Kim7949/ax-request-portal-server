@@ -24,6 +24,21 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-23 - Open questions from the first write-up resolved
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/ai/jobs.rs: in-process jobs now hold a lease (`WORKER_LEASE`); a result applies only while the claim is live; jobs claimed past `MAX_ATTEMPTS` are given up
+  - crates/api/src/requests/store.rs, crates/api/src/dashboard.rs: `store::may_open` is the one read rule behind `can_read` and the schedule's `canOpen`
+  - README.md, README.ko.md, deploy/.env.example, crates/api/src/config.rs: stale sentences about `login` responses and work runs corrected
+  - docs/llm-wiki: domains/00_overview, 04_requests, 08_dashboard_releases, 09_ai_jobs, 11_runner, API_CONTRACTS, OPERATIONS
+- evidence:
+  - crates/api/tests/ai.rs (`a_job_another_server_holds_waits_for_its_lease`, `a_job_its_workers_keep_dying_on_is_given_up`)
+- caveats:
+  - The edited documents are back to needs_review.
+
 ## 2026-11-23 - Wiki written from the code
 
 - status: needs_review

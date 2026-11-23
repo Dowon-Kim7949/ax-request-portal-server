@@ -60,7 +60,6 @@ The database tests need PostgreSQL: `scripts/cargo.sh test` starts a throwaway o
 - Guessing is limited per email: past `AX_LOGIN_ATTEMPTS` (5) failed sign-ins within `AX_LOGIN_LOCKOUT` (15 minutes), sign-ins for that email answer `401` with when to try again, even with the right password, until the lockout has passed. Attempts are counted before the password is checked, so parallel guesses cannot slip past, and unknown emails are counted alike, so nothing tells which emails exist. A successful sign-in clears the count. Someone who knows an email can keep it locked by guessing; an admin can still send that person a setup link.
 - Errors match the frontend's mock API: `401 unauthorized` for a failed sign-in or a missing, unknown or ended token; `403 forbidden` for a role without the permission; `400 bad_request` with `issues` for a body that does not match the contract. Messages follow `Accept-Language`.
 - Roles and permissions are the frontend's `src/domain/roles.ts` (5 roles, 13 permissions). Operator accounts are provisioned by the service, never by an admin: only the CLI makes them.
-- One difference from the contract: the contract lists only `200` and `400` for `login`, but a failed sign-in is `401`, as in the mock API the client is built against. The fix belongs in the frontend's `contract.ts`.
 
 | Command | What it does |
 | --- | --- |
@@ -151,7 +150,7 @@ With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy
 | `AX_RUNNER_TIMEOUT` | `30m` | (runner) How long one agent run may take |
 | `AX_RUNNER_WORKDIR` | temp dir | (runner) Where clones go, one directory per job, removed after |
 | `AX_CLAUDE_BIN` | `claude` | (runner) The Claude Code command |
-| `AX_AI_PROVIDER` | `stub` | Who writes reports: `stub`, or `anthropic` (Claude; needs a key). Work runs wait for a coding agent either way. |
+| `AX_AI_PROVIDER` | `stub` | Who writes reports: `stub`, or `anthropic` (Claude; needs a key). Neither changes code; work runs need the runner (`AX_RUNNER_TOKEN`), which then takes reports too. |
 | `AX_SCOPE_CHECK` | `true` | After a feasible or conditional report the requester confirms the AI's reading before review. Keep it equal to the frontend's `appConfig.workflow.scopeCheck`. |
 | `AX_TIME_ZONE` | `Asia/Seoul` | The business calendar (IANA name): "today" for desired and release dates, delays and monthly totals. Keep it equal to the frontend's `appConfig.organization.timeZone`; the server refuses to start with a name PostgreSQL does not know. |
 | `AX_DRAFTS_PER_ACCOUNT` | `20` | How many saved drafts one person may keep. Keep it equal to the frontend's `drafts.maxPerAccount`. |

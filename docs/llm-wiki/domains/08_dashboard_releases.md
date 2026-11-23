@@ -49,7 +49,7 @@ Two read-only views computed from requests: the executive summary of a month and
 
 ## Releases (`releases`)
 
-`GET /releases?from&to` (inclusive ISO dates), `schedule:view` (every role but operator). A request's date is its `releasedAt` business date, else its scheduled date; requests with neither, and cancelled or rejected ones, are left out. Grouped by `(date, projectId)` in date order; each item says `canOpen`, true exactly when the caller could open the request, so the schedule never links to a `404`. `releases` repeats the rule of `StoredRequest::can_read` (requester, `request:read:all`, assignee, project owner) in its own closure rather than calling it.
+`GET /releases?from&to` (inclusive ISO dates), `schedule:view` (every role but operator). A request's date is its `releasedAt` business date, else its scheduled date; requests with neither, and cancelled or rejected ones, are left out. Grouped by `(date, projectId)` in date order; each item says `canOpen`, true exactly when the caller could open the request, so the schedule never links to a `404`. It uses the same rule as `getRequest` (`store::may_open`: requester, `request:read:all`, assignee, project owner).
 
 Both operations check the query (400 naming `month`, `from` or `to`) **before** the permission (403), as the mock does.
 
@@ -63,7 +63,6 @@ Both operations check the query (400 naming `month`, `from` or `to`) **before** 
 ## Open Questions
 
 - Reading every request per summary is fine at the expected size; a large installation would want SQL aggregation.
-- `canOpen` duplicates the read rule of `StoredRequest::can_read`; a change to one must be made in the other.
 
 ## Review Notes
 

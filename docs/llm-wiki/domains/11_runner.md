@@ -93,7 +93,6 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 
 - Not yet run against real GitHub and Claude.
 - The server trusts the runner's `verified` flags; whoever holds the runner token is inside the trust boundary.
-- `deploy/.env.example` still says work runs "wait for a coding agent either way"; with a runner token the runner does run work.
 
 ## Review Notes
 

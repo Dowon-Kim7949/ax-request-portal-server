@@ -22,6 +22,12 @@ use crate::requests::store::{self, Actor, StoredRequest, field};
 /// Tries before a job is given up; the request then waits for a person.
 pub const MAX_ATTEMPTS: i32 = 3;
 
+/// How long the in-process worker holds a job: longer than any provider call
+/// (the Claude provider gives up after ten minutes). A job whose worker died
+/// returns to the pool when the lease runs out, as another attempt, so
+/// several servers can share one database without taking each other's jobs.
+pub const WORKER_LEASE: Duration = Duration::from_secs(15 * 60);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Task {
     Report,
@@ -95,10 +101,10 @@ pub struct Job {
 
 /// Claims the next due job.
 ///
-/// With a `lease` (a runner's claim) the job carries a fresh claim token and
-/// goes back to the pool if the runner is not heard from within the lease, as
-/// another attempt. Without one (the in-process worker) a job stays claimed
-/// until it ends; a restart puts unfinished ones back.
+/// With a `lease` (the in-process worker's [`WORKER_LEASE`], a runner's
+/// claim) the job carries a fresh claim token and goes back to the pool if it
+/// is not finished (or, for a runner, renewed) within the lease, as another
+/// attempt. Without one a job stays claimed until it ends.
 ///
 /// # Errors
 ///
@@ -186,9 +192,15 @@ pub async fn context(db: &PgPool, job: &Job, request: &StoredRequest) -> Result<
 ///
 /// Database failures (a provider's failure is recorded on the job instead).
 pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSettings) -> Result<bool, sqlx::Error> {
-    let Some(job) = claim(db, None).await? else { return Ok(false) };
+    let Some(job) = claim(db, Some(WORKER_LEASE)).await? else { return Ok(false) };
     let Some(request) = request_for(db, &job).await? else { return Ok(true) };
     let context = context(db, &job, &request).await?;
+    if job.attempts > MAX_ATTEMPTS {
+        // Claimed again and again without an end: the workers keep dying on it.
+        let failure = Failure { message: "the worker stopped before finishing".to_owned(), retry: false };
+        complete(db, &job, &request, &context.selection, Err(failure), &[], settings).await?;
+        return Ok(true);
+    }
     let (outcome, spend) = match job.task {
         Task::Report => {
             let reply = provider.report(&request, &context).await;
@@ -199,8 +211,23 @@ pub async fn run_once<P: Provider>(db: &PgPool, provider: &P, settings: &AiSetti
             (reply.outcome.map(Done::Work), reply.spend)
         }
     };
+    if !holds(db, &job).await? {
+        // The lease ran out mid-call and another attempt has the job; its
+        // answer counts, not this one.
+        tracing::warn!(job = job.id, request = job.request, "AI job outlived its lease");
+        return Ok(true);
+    }
     complete(db, &job, &request, &context.selection, outcome, &spend, settings).await?;
     Ok(true)
+}
+
+/// Whether `job`'s claim is still the live one.
+async fn holds(db: &PgPool, job: &Job) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("select exists (select 1 from ai_jobs where id = $1 and status = 'running' and claim = $2)")
+        .bind(job.id)
+        .bind(job.claim)
+        .fetch_one(db)
+        .await
 }
 
 /// Ends a job with what came of it: books every call, then applies the AI's
@@ -415,8 +442,11 @@ pub async fn run_pending<P: Provider>(db: &PgPool, provider: &P, settings: &AiSe
     Ok(ran)
 }
 
-/// The background worker: returns jobs a stopped server left running to the
-/// queue, then runs jobs as they become due, checking every two seconds.
+/// The background worker: runs jobs as they become due, checking every two
+/// seconds. A job a stopped server left running comes back when its lease runs
+/// out; only jobs claimed without one (by versions before
+/// [`WORKER_LEASE`]) are put back at start, which never touches a job another
+/// server holds now.
 pub fn spawn<P: Provider>(db: PgPool, provider: P, settings: AiSettings) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if let Err(error) =

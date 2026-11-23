@@ -227,15 +227,17 @@ pub async fn releases(
     auth::require(user, Permission::ScheduleView, lang)?;
     let db = state.db(lang)?;
     let all = rows(db, &state.time_zone.0).await.map_err(ApiError::db(lang))?;
-    let owners: Vec<(Uuid, Uuid)> = sqlx::query_as("select project_id, user_id from project_owners")
+    let rows_of_owners: Vec<(Uuid, Uuid)> = sqlx::query_as("select project_id, user_id from project_owners")
         .fetch_all(db)
         .await
         .map_err(ApiError::db(lang))?;
+    let mut owners: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for (project, owner) in rows_of_owners {
+        owners.entry(project).or_default().push(owner);
+    }
     let can_open = |r: &Item, user: &User| {
-        r.requester_id == user.id
-            || user.role.can(Permission::RequestReadAll)
-            || r.assignee_id == Some(user.id)
-            || owners.iter().any(|(p, u)| *p == r.project_id && *u == user.id)
+        let project_owners = owners.get(&r.project_id).map_or(&[][..], Vec::as_slice);
+        store::may_open(user, r.requester_id, r.assignee_id, project_owners)
     };
 
     let (from, to) = (params.get("from"), params.get("to"));

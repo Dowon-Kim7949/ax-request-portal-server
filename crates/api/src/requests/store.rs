@@ -154,9 +154,7 @@ impl StoredRequest {
     /// are responsible for it. Anyone else gets the same `404` as for a
     /// request that does not exist.
     pub fn can_read(&self, user: &User, owners: &[Uuid]) -> bool {
-        self.requester_id == user.id
-            || user.role.can(Permission::RequestReadAll)
-            || self.responsible(owners).contains(&user.id)
+        may_open(user, self.requester_id, self.assignee_id, owners)
     }
 
     /// The contract's `WorkRequest`.
@@ -283,4 +281,15 @@ pub async fn today(db: impl PgExecutor<'_>, time_zone: &str) -> Result<String, s
 /// Database failures.
 pub async fn now_iso(db: impl PgExecutor<'_>) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(&format!("select {}", iso("now()"))).fetch_one(db).await
+}
+
+/// Whether `user` may open a request filed by `requester`, assigned to
+/// `assignee`, in a project owned by `owners`: the rule of
+/// [`StoredRequest::can_read`], for code that holds only those ids (the
+/// release schedule's `canOpen`).
+pub fn may_open(user: &User, requester: Uuid, assignee: Option<Uuid>, owners: &[Uuid]) -> bool {
+    requester == user.id
+        || user.role.can(Permission::RequestReadAll)
+        || assignee == Some(user.id)
+        || owners.contains(&user.id)
 }

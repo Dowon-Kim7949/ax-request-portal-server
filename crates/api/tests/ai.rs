@@ -128,6 +128,44 @@ async fn a_request_that_moved_on_is_left_alone(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_job_another_server_holds_waits_for_its_lease(pool: PgPool) {
+    let w = world(&pool, "en").await;
+    // Another server's worker has the job, and its lease still runs.
+    sqlx::query(
+        "update ai_jobs set status = 'running', attempts = 1, claim = gen_random_uuid(),
+                lease_until = now() + interval '10 minutes'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(run_pending(&pool, &StubProvider, &settings()).await.unwrap(), 0, "not taken from it");
+    assert_eq!(get(&pool, &w.dev).await["status"], "reporting");
+
+    // That server died: the lease runs out and the job is another attempt.
+    sqlx::query("update ai_jobs set lease_until = now() - interval '1 second'").execute(&pool).await.unwrap();
+    assert_eq!(run_pending(&pool, &StubProvider, &settings()).await.unwrap(), 1);
+    assert_eq!(jobs(&pool).await, [("report".into(), "done".into(), 2)]);
+    assert_eq!(get(&pool, &w.dev).await["status"], "review");
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_job_its_workers_keep_dying_on_is_given_up(pool: PgPool) {
+    let w = world(&pool, "en").await;
+    sqlx::query(
+        "update ai_jobs set status = 'running', attempts = $1, claim = gen_random_uuid(),
+                lease_until = now() - interval '1 second'",
+    )
+    .bind(MAX_ATTEMPTS)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(run_pending(&pool, &StubProvider, &settings()).await.unwrap(), 1);
+    assert_eq!(jobs(&pool).await, [("report".into(), "failed".into(), MAX_ATTEMPTS + 1)]);
+    // Handed to the developer rather than left in `reporting`.
+    assert_eq!(get(&pool, &w.dev).await["status"], "review");
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
 async fn an_answer_gets_a_new_revision(pool: PgPool) {
     let w = world(&pool, "en").await;
     run_pending(&pool, &StubProvider, &settings()).await.unwrap();
