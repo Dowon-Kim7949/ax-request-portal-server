@@ -2,8 +2,8 @@
 title: Operations
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: operations
 project: ax-request-portal-server
 last_updated: 2026-11-23
@@ -49,7 +49,7 @@ Everything comes from environment variables (`deploy/.env`, from `deploy/.env.ex
 | `AX_SETUP_LINK_TTL` | `72h` | setup link lifetime |
 | `AX_LOGIN_ATTEMPTS` / `AX_LOGIN_LOCKOUT` | `5` / `15m` | login throttling |
 | `AX_TIME_ZONE` | `Asia/Seoul` | business calendar; checked against PostgreSQL's zone names at start |
-| `AX_AI_PROVIDER` | `stub` | `stub` or `anthropic` (needs a key) |
+| `AX_AI_PROVIDER` | `stub` | `stub` or `anthropic` (needs a key) for reports; neither changes code — work needs the runner |
 | `AX_SCOPE_CHECK` | `true` | ask the requester to confirm the AI's scope; keep equal to the frontend's `workflow.scopeCheck` |
 | `AX_ANTHROPIC_API_KEY` (+ `_PRECHECK`, `_REPORT`, `_WORK`) | unset | secret; per-task keys override the shared one |
 | `AX_RUNNER_TOKEN` | unset | secret, 32+ characters; set it and AI jobs wait for a runner |

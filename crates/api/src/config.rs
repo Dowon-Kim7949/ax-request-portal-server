@@ -59,8 +59,8 @@ pub struct Config {
 pub struct AiSettings {
     /// `stub`: writes an honest "no AI provider" report and work result, so
     /// the lifecycle can be used end to end without one. `anthropic`: Claude
-    /// writes the report (see `ai::claude`); work runs still wait for a
-    /// coding agent.
+    /// writes the report (see `ai::claude`). Neither changes code: work runs
+    /// need the runner (`runner_token`).
     pub provider: String,
     /// The frontend's `appConfig.workflow.scopeCheck`: after a feasible or
     /// conditional report the requester confirms the AI's reading of the

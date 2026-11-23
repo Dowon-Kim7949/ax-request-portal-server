@@ -2,8 +2,8 @@
 title: AI Jobs
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
 last_updated: 2026-11-23
@@ -24,6 +24,8 @@ evidence:
   - crates/api/src/ai/jobs.rs#symbol:claim
   - crates/api/src/ai/jobs.rs#symbol:complete
   - crates/api/src/ai/jobs.rs#symbol:MAX_ATTEMPTS
+  - crates/api/src/ai/jobs.rs#symbol:WORKER_LEASE
+  - crates/api/src/ai/jobs.rs#symbol:holds
   - crates/api/src/ai/jobs.rs#symbol:given_up
   - crates/api/src/ai/jobs.rs#symbol:apply_report
   - crates/api/src/ai/jobs.rs#symbol:apply_work
@@ -64,11 +66,11 @@ The queue of AI work on requests, the in-process worker, the providers that do t
 ## Jobs
 
 - **Two tasks**: `report` for a request entering `reporting`, `work` for one entering `in_progress` (`Task::for_status`). Jobs are queued in the same transaction as filing or the human transition, in the requester's language for reports. At most one open job per `(request, task)` (partial unique index; `on conflict do nothing`).
-- **States** `queued → running → done | failed`. `claim` takes the oldest due job with `for update skip locked` and increments `attempts`. In-process jobs carry no claim or lease; runner jobs carry both ([Runner](11_runner.md)).
+- **States** `queued → running → done | failed`. `claim` takes the oldest due job with `for update skip locked`, increments `attempts`, and gives it a fresh claim id and a lease: `WORKER_LEASE` (15 minutes, longer than any provider call) for the in-process worker, 10 minutes renewed by heartbeats for the [Runner](11_runner.md). A running job whose lease has run out is claimable again, as another attempt; one claimed beyond `MAX_ATTEMPTS` is given up. A worker applies its result only while its claim is still the live one.
 - **Retries**: a retryable failure goes back to `queued` after `attempts × 30` s while `attempts < MAX_ATTEMPTS` (3); otherwise the job is `failed` with its error.
 - **Giving up hands the request to a person** (`given_up`), in the same transaction, so a request is never stuck in an AI step: a report becomes `hand_over_report` (verdict `undetermined`, every criterion left for a person) and `reportReady` moves the request to `review`; work becomes `hand_over_work` (outcome `error`, no code changed) and `workFinished` moves it to `code_review`.
 - **A request that moved on is left alone**: `request_for` only returns the request while it still waits in the job's status; a cancelled or otherwise moved request closes the job as `done`. `complete` locks the request and applies only if the status still matches.
-- On start the worker returns **every** `running` job without a claim to `queued` (left over from a crash); it polls every 2 s (5 s after a database error). Because the reset does not tell instances apart, run one in-process worker — or the runner — per database.
+- A crashed server's jobs come back when their leases run out, so several servers can share one database. At start the worker only requeues `running` jobs without a claim, which only versions before `WORKER_LEASE` left behind. It polls every 2 s (5 s after a database error).
 - **Where the job runs**: `AX_RUNNER_TOKEN` set → no in-process worker, jobs wait for the runner. Otherwise `AX_AI_PROVIDER=anthropic` runs `ClaudeProvider`, else `StubProvider` (`main.rs`).
 
 ## Applying results
@@ -96,19 +98,18 @@ Used for runner answers, so a model cannot claim more than its evidence:
 
 ## Evidence
 
-- `crates/api/src/ai/jobs.rs#symbol:for_status`, `crates/api/src/ai/jobs.rs#symbol:enqueue_for`, `crates/api/src/ai/jobs.rs#symbol:claim`, `crates/api/src/ai/jobs.rs#symbol:complete`, `crates/api/src/ai/jobs.rs#symbol:MAX_ATTEMPTS`, `crates/api/src/ai/jobs.rs#symbol:request_for`, `crates/api/src/ai/jobs.rs#symbol:spawn` — the queue.
+- `crates/api/src/ai/jobs.rs#symbol:for_status`, `crates/api/src/ai/jobs.rs#symbol:enqueue_for`, `crates/api/src/ai/jobs.rs#symbol:claim`, `crates/api/src/ai/jobs.rs#symbol:complete`, `crates/api/src/ai/jobs.rs#symbol:MAX_ATTEMPTS`, `crates/api/src/ai/jobs.rs#symbol:WORKER_LEASE`, `crates/api/src/ai/jobs.rs#symbol:holds`, `crates/api/src/ai/jobs.rs#symbol:request_for`, `crates/api/src/ai/jobs.rs#symbol:spawn` — the queue.
 - `crates/api/src/ai/jobs.rs#symbol:given_up`, `crates/api/src/ai/mod.rs#symbol:hand_over_report`, `crates/api/src/ai/mod.rs#symbol:hand_over_work` — hand-over on final failure.
 - `crates/api/src/ai/jobs.rs#symbol:apply_report`, `crates/api/src/ai/jobs.rs#symbol:apply_work`, `crates/api/src/ai/jobs.rs#symbol:started_by` — results and booking.
 - `crates/api/src/ai/mod.rs#symbol:Provider`, `crates/api/src/ai/mod.rs#symbol:Reply`, `crates/api/src/ai/mod.rs#symbol:Failure`, `crates/api/src/ai/mod.rs#symbol:StubProvider` — the provider seam.
 - `crates/api/src/ai/claude.rs#symbol:ClaudeProvider`, `crates/api/src/ai/claude.rs#symbol:API_VERSION`, `crates/api/src/ai/claude.rs#symbol:report_body`, `crates/api/src/ai/claude.rs#symbol:supports_fallbacks` — the Claude provider.
 - `crates/api/src/ai/agent.rs#symbol:report`, `crates/api/src/ai/agent.rs#symbol:wiki_trust`, `crates/api/src/ai/agent.rs#symbol:WIKI_DOCS_MAX` — server-side verdict rules.
 - `crates/api/src/main.rs#L90-L104` — worker or runner.
-- Tests: `crates/api/tests/ai.rs` (`the_stub_reports_honestly_and_the_developer_reviews`, `a_request_that_moved_on_is_left_alone`, `a_feasible_report_asks_the_requester_first`, `a_failing_job_is_retried_then_given_up`), `crates/api/tests/claude.rs` (`claude_writes_a_report_that_claims_nothing_it_did_not_read`, `a_refusal_or_a_rejected_call_is_not_retried`, `haiku_takes_no_fallback_and_a_non_code_request_is_out_of_scope`).
+- Tests: `crates/api/tests/ai.rs` (`the_stub_reports_honestly_and_the_developer_reviews`, `a_request_that_moved_on_is_left_alone`, `a_feasible_report_asks_the_requester_first`, `a_failing_job_is_retried_then_given_up`, `a_job_another_server_holds_waits_for_its_lease`, `a_job_its_workers_keep_dying_on_is_given_up`), `crates/api/tests/claude.rs` (`claude_writes_a_report_that_claims_nothing_it_did_not_read`, `a_refusal_or_a_rejected_call_is_not_retried`, `haiku_takes_no_fallback_and_a_non_code_request_is_out_of_scope`).
 
 ## Open Questions
 
 - Neither the Claude provider nor the runner has been run against the real API or GitHub yet; tests use local fakes.
-- Two server instances with in-process workers would reset each other's running jobs on start; the code assumes one.
 
 ## Review Notes
 

@@ -2,8 +2,8 @@
 title: API Contracts
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: api_contracts
 project: ax-request-portal-server
 last_updated: 2026-11-23
@@ -68,7 +68,7 @@ The API is defined by the frontend template, not here. Its `src/api/contract.ts`
 
 ## Open Questions
 
-- `README.md` ("Sign-in") still says the contract lists only `200` and `400` for `login`; the pinned contract now also declares `401`.
+- None known.
 
 ## Review Notes
 
