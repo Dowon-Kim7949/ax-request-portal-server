@@ -352,7 +352,9 @@ pub async fn list(
 /// The rules always answer. With Claude connected and the precheck's model
 /// (per project) an Anthropic one, Claude's advice follows for fields the
 /// rules said nothing about; the call is booked against the caller, and a
-/// failure or a slow answer leaves the rules alone.
+/// failure or a slow answer leaves the rules alone. `aiAdvice` says which
+/// happened (`included`, `failed`, or `notConnected` when Claude was not
+/// asked), so the screen does not pass the rules off as the AI's check.
 pub async fn precheck(
     State(state): State<AppState>,
     lang: Lang,
@@ -364,6 +366,7 @@ pub async fn precheck(
     let db = state.db(lang)?;
     let today = store::today(db, &state.time_zone.0).await.map_err(ApiError::db(lang))?;
     let mut issues = precheck::advise(&draft, &today, lang);
+    let mut ai_advice = "notConnected";
     if let Some(claude) = &state.claude {
         let mut conn = db.acquire().await.map_err(ApiError::db(lang))?;
         let selection = settings::selections(&mut conn)
@@ -390,12 +393,16 @@ pub async fn precheck(
                 Ok(advice) => {
                     let flagged: Vec<String> = issues.iter().map(|i| i.field.clone()).collect();
                     issues.extend(advice.into_iter().filter(|a| !flagged.contains(&a.field)));
+                    ai_advice = "included";
                 }
-                Err(failure) => tracing::warn!(error = %failure.message, "AI precheck failed; the rules answer alone"),
+                Err(failure) => {
+                    tracing::warn!(error = %failure.message, "AI precheck failed; the rules answer alone");
+                    ai_advice = "failed";
+                }
             }
         }
     }
-    Ok(Json(json!({ "issues": issues })))
+    Ok(Json(json!({ "issues": issues, "aiAdvice": ai_advice })))
 }
 
 #[cfg(test)]

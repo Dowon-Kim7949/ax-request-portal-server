@@ -292,6 +292,7 @@ async fn precheck_advises_without_filing(pool: PgPool) {
     let fields: Vec<&str> = answer["issues"].as_array().unwrap().iter().map(|i| i["field"].as_str().unwrap()).collect();
     assert_eq!(fields, ["acceptanceCriteria.0", "desiredDate", "desiredDateReason"]);
     assert_eq!(answer["issues"][1]["message"], "희망 일정이 이미 지난 날짜입니다.");
+    assert_eq!(answer["aiAdvice"], "notConnected", "the stub asks no model");
 
     assert_eq!(
         send(&pool, "POST", "/requests/precheck", Some(&w.operator), "en", Some(body)).await.0,
