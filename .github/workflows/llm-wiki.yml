@@ -1,0 +1,44 @@
+name: LLM-WIKI
+
+# Keeps docs/llm-wiki honest: frontmatter and evidence locators must resolve,
+# and a pull request that changes a source file a `verified` wiki document cites
+# must update that document too (llm-wiki.config.json makes
+# impact.source_changed an error). Documents only become `verified` when a
+# person runs `npx llm-wiki-governance@<version> review --approve <path>`;
+# until then the gate has nothing to guard.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wiki:
+    name: Wiki structure and undocumented changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # This repository has no Node project, so the CLI version is pinned here.
+    # Always the full package name; the short `llm-wiki` on npm is unrelated.
+    env:
+      WIKI: llm-wiki-governance@1.42.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `impact --since` compares against the base branch; a shallow clone
+          # lacks that ref and the gate would weaken silently.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npx -y "$WIKI" validate-frontmatter
+      - run: npx -y "$WIKI" validate --strict --agent claude
+      - name: Gate on undocumented source changes
+        run: npx -y "$WIKI" impact --since "origin/${{ github.base_ref || 'main' }}" --strict

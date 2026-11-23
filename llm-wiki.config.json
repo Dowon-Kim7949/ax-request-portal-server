@@ -1,0 +1,13 @@
+{
+  "type": "backend",
+  "agents": [
+    "claude"
+  ],
+  "governance": {
+    "mode": "standard"
+  },
+  "rules": {
+    "impact.source_changed": "error",
+    "project.review_item": "info"
+  }
+}
