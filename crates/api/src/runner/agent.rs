@@ -129,10 +129,41 @@ pub fn request_brief(request: &Value, project: &Value) -> Value {
             brief.insert(key.into(), value.clone());
         }
     }
-    if let Some(decision) = request["scope"].get("decision") {
-        brief.insert("scopeDecision".into(), decision.clone());
+    if let Some(scope) = confirmed_scope(&request["scope"]) {
+        brief.insert("confirmedScope".into(), scope);
     }
     Value::Object(brief)
+}
+
+/// The scope the requester confirmed, in words: the reading of the request
+/// they approved, and for each question the option they picked. The stored
+/// decision holds only ids, which mean nothing to the agent. `None` until
+/// they confirm one; a new report replaces the scope, so a decision always
+/// answers the proposal stored with it.
+fn confirmed_scope(scope: &Value) -> Option<Value> {
+    let decision = scope.get("decision").filter(|d| d.is_object())?;
+    let proposal = &scope["proposal"];
+    let questions = proposal["questions"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let answers: Vec<Value> = decision["choices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|choice| {
+            let question = questions.iter().find(|q| q["id"] == choice["questionId"])?;
+            let option = question["options"].as_array()?.iter().find(|o| o["id"] == choice["optionId"])?;
+            Some(json!({ "question": question["text"], "answer": option["label"] }))
+        })
+        .collect();
+    let mut confirmed = json!({
+        "summary": proposal["summary"],
+        "changes": proposal["changes"],
+        "unchanged": proposal["unchanged"],
+        "answers": answers,
+    });
+    if let Some(note) = decision["note"].as_str().filter(|n| !n.is_empty()) {
+        confirmed["note"] = json!(note);
+    }
+    Some(confirmed)
 }
 
 pub fn project_brief(project: &Value) -> Value {
@@ -209,6 +240,9 @@ repository, on the current branch.
 
 - Read CLAUDE.md or AGENTS.md first if the repository has one, and follow the project's conventions.
 - Follow the feasibility report's plan. The developer confirmed the assumptions listed as confirmed.
+- When the request has a confirmedScope, the requester approved it: make the changes it lists, keep what it lists as \
+unchanged, and follow each of the requester's answers. Where the plan or the report's open questions say otherwise, \
+the confirmed scope wins. Add no behaviour it does not ask for.
 - Add or update tests so each acceptance criterion is checked, then run the project's tests.
 - If the change alters behaviour a wiki page under `{wiki}` describes, update that page in the same change. Never mark \
 a wiki page as reviewed or verified: a person reviews wiki edits.
@@ -423,6 +457,37 @@ mod tests {
             work_prompt(&json!({ "work": { "instructions": "Keep it small" } }), &project, "ko")
                 .contains("Keep it small")
         );
+        assert!(brief.get("confirmedScope").is_none(), "nothing confirmed yet");
+    }
+
+    #[test]
+    fn the_confirmed_scope_reaches_the_agent_in_words() {
+        let project = json!({ "name": "Portal", "targets": [] });
+        let proposal = json!({
+            "summary": "Warn before leaving with unsaved changes.", "changes": ["A warning"], "unchanged": ["Saving"],
+            "questions": [
+                { "id": "q1", "text": "Warn on reload too?", "options": [{ "id": "q1o1", "label": "Menu only" }, { "id": "q1o2", "label": "Reload too" }] },
+                { "id": "q2", "text": "Count the tag dialog?", "options": [{ "id": "q2o1", "label": "No" }, { "id": "q2o2", "label": "Yes" }] },
+            ],
+        });
+        let decision = json!({ "at": "2026-11-26T00:00:00.000Z", "by": "u1", "note": "Keep it light",
+            "choices": [{ "questionId": "q1", "optionId": "q1o1" }, { "questionId": "q2", "optionId": "q9" }] });
+        let request = json!({ "id": 3, "title": "Warn", "scope": { "proposal": proposal, "decision": decision } });
+        let scope = &request_brief(&request, &project)["confirmedScope"];
+        assert_eq!(
+            scope,
+            &json!({
+                "summary": "Warn before leaving with unsaved changes.", "changes": ["A warning"], "unchanged": ["Saving"],
+                "answers": [{ "question": "Warn on reload too?", "answer": "Menu only" }],
+                "note": "Keep it light",
+            }),
+            "answers by their words; a choice that names no option is left out"
+        );
+        let prompt = work_prompt(&request, &project, "en");
+        assert!(prompt.contains("Menu only") && prompt.contains("the confirmed scope wins"), "{prompt}");
+        assert!(!prompt.contains("q1o1"), "no ids the agent cannot read");
+        let unconfirmed = json!({ "scope": { "proposal": proposal } });
+        assert!(request_brief(&unconfirmed, &project).get("confirmedScope").is_none(), "a proposal is not a decision");
     }
 
     #[test]
