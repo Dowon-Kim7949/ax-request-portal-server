@@ -2,8 +2,8 @@
 title: Runner
 tags:
   - llm-wiki
-  - needs-review
-status: needs_review
+  - verified
+status: verified
 doc_type: domain
 project: ax-request-portal-server
 last_updated: 2026-11-26
@@ -42,7 +42,8 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-23
+reviewed_at: 2026-11-26
+reviewed_by: Kim Dowon
 ---
 
 # Runner
