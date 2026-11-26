@@ -243,14 +243,21 @@ repository, on the current branch.
 - When the request has a confirmedScope, the requester approved it: make the changes it lists, keep what it lists as \
 unchanged, and follow each of the requester's answers. Where the plan or the report's open questions say otherwise, \
 the confirmed scope wins. Add no behaviour it does not ask for.
-- Add or update tests so each acceptance criterion is checked, then run the project's tests.
+- Before you run anything, install the project's dependencies if they are not installed yet: this is a fresh clone. \
+Use the package manager and the lockfile the project already uses, without updating the lockfile (for example \
+`npm ci`, `yarn install --immutable` or `--frozen-lockfile`, `pnpm install --frozen-lockfile`, or the project's own \
+setup script). If installing changes a tracked file, such as a lockfile or install state, restore it: installing is \
+not part of the change.
+- Add or update tests so each acceptance criterion is checked, then run the project's tests. If they cannot run, find \
+out why and fix the cause in your environment (usually a missing dependency or tool) before you answer.
 - If the change alters behaviour a wiki page under `{wiki}` describes, update that page in the same change. Never mark \
 a wiki page as reviewed or verified: a person reviews wiki edits.
 - Keep to the request. Do not change unrelated code, and never touch secrets or credentials.
 - Do not commit, push, merge or open a pull request: the portal does that when you finish.
 {instructions}
 Answer in the given JSON schema: outcome (success when the change is made and the tests pass, tests_failed when it is \
-made but tests fail, error when you could not make it), summary (what you changed, in plain sentences, in {lang}), \
+made but tests fail, error when you could not make it or the tests still could not run, saying why in the summary), \
+summary (what you changed, in plain sentences, in {lang}), \
 and tests: existingPassed and existingTotal for the project's tests that existed before, criteriaPassed and \
 criteriaTotal for the tests of the acceptance criteria.
 
@@ -458,6 +465,16 @@ mod tests {
                 .contains("Keep it small")
         );
         assert!(brief.get("confirmedScope").is_none(), "nothing confirmed yet");
+    }
+
+    #[test]
+    fn a_work_run_installs_before_it_tests() {
+        let prompt = work_prompt(&json!({}), &json!({ "name": "Portal" }), "en");
+        let install = prompt.find("install the project's dependencies").expect("an install step");
+        let test = prompt.find("run the project's tests").expect("a test step");
+        assert!(install < test, "installing comes first");
+        assert!(prompt.contains("without updating the lockfile") && prompt.contains("restore it"));
+        assert!(prompt.contains("fix the cause") && prompt.contains("the tests still could not run"));
     }
 
     #[test]

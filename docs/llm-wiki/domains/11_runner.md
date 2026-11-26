@@ -2,8 +2,8 @@
 title: Runner
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
 last_updated: 2026-11-26
@@ -45,7 +45,6 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-26
 ---
 
@@ -73,7 +72,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - **Failures** (`RunError`): a failed git command retries, except when the token is refused (`git::refused`: HTTP 401, 403 or 404, "Authentication failed", "Write access to repository not granted", "Repository not found", "denied to"; git runs with `LC_ALL=C` so the messages are English): that fails without retry, since another attempt would only run the agent again and be refused again; GitHub REST calls retry on 429, 5xx and network errors and fail on other 4xx; Claude Code that cannot start or breaks off with an I/O error retries; a timeout, a run without a result, an agent that did not finish and a spent budget fail without retry.
 - **Claude Code flags** (`runner/agent.rs#symbol:run`): always `--bare --no-session-persistence --output-format json --json-schema …`, plus `--max-budget-usd <budgetUsd>` when the request has a per-request limit (a remaining budget of 0 fails the run before it starts), the task's key as `ANTHROPIC_API_KEY`, auto-update disabled.
   - **report** — read-only: `--permission-mode dontAsk` with `Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch` disallowed, on a shallow clone of the default branch. The answer follows a closed schema (`report_schema`). The runner keeps only wiki pages under the project's wiki path and code files that exist, inside the repository, and decides `verified` from each page's front matter — the model cannot vouch for a page. The wiki's own navigation and bookkeeping pages are dropped from the evidence (`navigation_page`): by `doc_type` (`index`, `wiki_index`, `readme`, `wiki_readme`, `project_profile`, `profile`, `change_log`, `changelog`, `log`, `template`, `guide`, `agent_guide`; case and `-`/`_` ignored) or by the standard layout (`index.md`, `README.md`, `project-profile.md`, `log.md`, `templates/`, `profiles/`). They say nothing about the change, so their review state does not lower wiki trust; a report citing only them has no wiki evidence and is `undetermined`. The prompt asks for pages about the software only.
-  - **work** — edits: `--permission-mode bypassPermissions` with only web tools disallowed, so the agent can edit and run tests in the clone. The prompt (`work_prompt`) forbids committing, pushing, merging, opening pull requests, marking wiki pages reviewed or verified, and touching secrets; without git credentials it could not push anyway. Once the requester has approved a scope, the request brief carries it in words as `confirmedScope` (`confirmed_scope`: the approved summary, changes and unchanged items, each question with the option picked by its label, and the requester's note); the stored decision holds only ids. The prompt tells the agent to stay within it: where the plan or the report's open questions differ, the confirmed scope wins.
+  - **work** — edits: `--permission-mode bypassPermissions` with only web tools disallowed, so the agent can edit and run tests in the clone. The prompt (`work_prompt`) forbids committing, pushing, merging, opening pull requests, marking wiki pages reviewed or verified, and touching secrets; without git credentials it could not push anyway. Once the requester has approved a scope, the request brief carries it in words as `confirmedScope` (`confirmed_scope`: the approved summary, changes and unchanged items, each question with the option picked by its label, and the requester's note); the stored decision holds only ids. The prompt tells the agent to stay within it: where the plan or the report's open questions differ, the confirmed scope wins. It also has the agent install the project's dependencies first (the clone is fresh), with the project's own package manager and lockfile and without updating it, restoring any tracked file the install changes; when the tests cannot run it fixes the cause before answering, and `error` covers a change whose tests still could not run.
 - **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `git push --dry-run` to that branch, before the agent spends anything (a token without the right to push fails the job here, at no cost) → `editing` → agent → no changed files means outcome `error` with "no files changed" → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
 - **Wiki review state**: `unverify_wiki` turns `status: verified` into `needs_review` in every wiki page the agent changed or added, before committing. This rule lives in the runner, not the server.
 - **Nothing merges**: there is no merge call; protect the default branch and give the token Contents and Pull requests write only ([Security](../SECURITY.md)).

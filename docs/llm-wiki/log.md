@@ -24,6 +24,20 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - A work run installs dependencies before it tests
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/runner/agent.rs: the work prompt has the agent install dependencies first with the project's lockfile, restore tracked files the install changes, fix the cause when tests cannot run, and answer `error` when they still cannot
+  - docs/llm-wiki: domains/11_runner
+- evidence:
+  - crates/api/src/runner/agent.rs (`a_work_run_installs_before_it_tests`)
+- caveats:
+  - The edited document is back to needs_review.
+  - This is an instruction to the agent; whether the tests really ran is still read from its answer.
+
 ## 2026-11-26 - A work run is held to the scope the requester confirmed
 
 - status: needs_review
