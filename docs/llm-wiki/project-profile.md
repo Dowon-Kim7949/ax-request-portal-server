@@ -2,11 +2,11 @@
 title: Project Profile
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: project_profile
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -23,7 +23,6 @@ related:
   - docs/llm-wiki/OPERATIONS.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-23
 ---
 
@@ -60,7 +59,7 @@ See [Operations](OPERATIONS.md) for settings, images and CI.
 
 ## Open Questions
 
-- Not yet deployed or run against the real Claude API and GitHub; keys, tokens and the deployment host are pending.
+- Deployed with Compose on an internal test host and run against the real Claude API and GitHub, reports and pull requests included (2026-11-26). The trial's keys and tokens expire; whether they are renewed is still open.
 
 ## Review Notes
 
