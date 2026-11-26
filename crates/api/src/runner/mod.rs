@@ -3,8 +3,10 @@
 //!
 //! - A **report** clones the default branch and lets the agent read the code
 //!   and the wiki. The runner keeps only the wiki pages and files that exist,
-//!   and reads each page's review state from its front matter; the server
-//!   decides what the report may claim from that (`ai::agent`).
+//!   leaves out the wiki's own navigation pages (index, README, profiles,
+//!   log, templates, guides: they say nothing about the change), and reads
+//!   each page's review state from its front matter; the server decides what
+//!   the report may claim from that (`ai::agent`).
 //! - A **work run** checks out the run's branch (`ax/request-<id>`, continued
 //!   by later runs), lets the agent edit and test, commits what it changed,
 //!   pushes the branch and opens (or reuses) the pull request. The agent holds
@@ -260,7 +262,8 @@ impl Runner {
         let prompt = agent::report_prompt(&job.request, &job.project, &job.lang);
         let schema = agent::report_schema();
         let (mut answer, spend) = agent::run(&self.agent(job, &clone, &prompt, &schema, Mode::Read)?).await?;
-        // Only evidence that exists, and the review state the wiki itself records.
+        // Only evidence that exists and is about the software, with the review
+        // state the wiki itself records.
         let wiki = job.wiki_path();
         let docs: Vec<Value> = answer["wikiDocs"]
             .as_array()
@@ -268,13 +271,15 @@ impl Runner {
             .flatten()
             .filter_map(|doc| {
                 let path = relative(doc["path"].as_str()?)?;
-                if !path.starts_with(&format!("{wiki}/")) {
+                let inside = path.strip_prefix(&format!("{wiki}/"))?;
+                let text = std::fs::read_to_string(clone.join(&path)).ok()?;
+                let page = front_matter(&text);
+                if navigation_page(inside, page.doc_type.as_deref()) {
                     return None;
                 }
-                let text = std::fs::read_to_string(clone.join(&path)).ok()?;
-                let (status, title) = front_matter(&text);
-                let title = title.or_else(|| doc["title"].as_str().map(str::to_owned)).unwrap_or_else(|| path.clone());
-                Some(json!({ "path": path, "title": title, "verified": status.as_deref() == Some("verified") }))
+                let title =
+                    page.title.or_else(|| doc["title"].as_str().map(str::to_owned)).unwrap_or_else(|| path.clone());
+                Some(json!({ "path": path, "title": title, "verified": page.status.as_deref() == Some("verified") }))
             })
             .collect();
         let files: Vec<String> = answer["codeFiles"]
@@ -377,20 +382,63 @@ fn relative(path: &str) -> Option<String> {
     inside.then(|| path.to_owned())
 }
 
-/// `status` and `title` from a Markdown page's front matter.
-fn front_matter(text: &str) -> (Option<String>, Option<String>) {
-    let Some(rest) = text.strip_prefix("---\n").or_else(|| text.strip_prefix("---\r\n")) else { return (None, None) };
-    let mut status = None;
-    let mut title = None;
+/// What a Markdown page's front matter says about it.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct FrontMatter {
+    status: Option<String>,
+    title: Option<String>,
+    doc_type: Option<String>,
+}
+
+fn front_matter(text: &str) -> FrontMatter {
+    let mut page = FrontMatter::default();
+    let Some(rest) = text.strip_prefix("---\n").or_else(|| text.strip_prefix("---\r\n")) else { return page };
     for line in rest.lines().take_while(|l| l.trim_end() != "---") {
-        let value = |l: &str| l.split_once(':').map(|(_, v)| v.trim().trim_matches(['"', '\'']).to_owned());
+        let value = |l: &str| {
+            l.split_once(':').map(|(_, v)| v.trim().trim_matches(['"', '\'']).to_owned()).filter(|v| !v.is_empty())
+        };
         if line.starts_with("status:") {
-            status = value(line);
+            page.status = value(line);
         } else if line.starts_with("title:") {
-            title = value(line).filter(|t| !t.is_empty());
+            page.title = value(line);
+        } else if line.starts_with("doc_type:") {
+            page.doc_type = value(line);
         }
     }
-    (status, title)
+    page
+}
+
+/// The `doc_type`s of a wiki's own navigation and bookkeeping pages, as the
+/// LLM-WIKI tools write them (they differ in spelling).
+const NAVIGATION_TYPES: [&str; 12] = [
+    "index",
+    "wiki_index",
+    "readme",
+    "wiki_readme",
+    "project_profile",
+    "profile",
+    "change_log",
+    "changelog",
+    "log",
+    "template",
+    "guide",
+    "agent_guide",
+];
+
+/// Whether a wiki page (its path inside the wiki) is one of the wiki's own
+/// navigation or bookkeeping pages rather than a page about the software:
+/// the index, README, project and stack profiles, the change log, templates
+/// and agent guides. The agent reads them to find its way, but they are no
+/// evidence for a request, and their review state says nothing about the
+/// pages that are. Known by `doc_type`, or by the standard layout when a
+/// tool names the type differently.
+fn navigation_page(inside: &str, doc_type: Option<&str>) -> bool {
+    let by_type = doc_type
+        .map(|t| t.trim().to_ascii_lowercase().replace('-', "_"))
+        .is_some_and(|t| NAVIGATION_TYPES.contains(&t.as_str()));
+    let by_path = matches!(inside, "index.md" | "README.md" | "project-profile.md" | "log.md")
+        || ["templates/", "profiles/"].iter().any(|dir| inside.starts_with(dir));
+    by_type || by_path
 }
 
 /// The AI never approves its own wiki edits: a page it changed that says
@@ -403,7 +451,7 @@ async fn unverify_wiki(clone: &Path, git: &Git<'_>, wiki: &str) -> Result<(), Ru
     for path in paths.lines().map(str::trim).filter(|p| !p.is_empty()) {
         let file = clone.join(path);
         let Ok(text) = std::fs::read_to_string(&file) else { continue };
-        if front_matter(&text).0.as_deref() != Some("verified") {
+        if front_matter(&text).status.as_deref() != Some("verified") {
             continue;
         }
         let mut in_front = false;
@@ -436,9 +484,41 @@ mod tests {
     }
 
     #[test]
-    fn front_matter_gives_status_and_title() {
-        let page = "---\ntitle: \"Notices\"\nstatus: verified\n---\n# Notices\nstatus: not here\n";
-        assert_eq!(front_matter(page), (Some("verified".into()), Some("Notices".into())));
-        assert_eq!(front_matter("# No front matter"), (None, None));
+    fn front_matter_gives_status_title_and_type() {
+        let page = "---\ntitle: \"Notices\"\nstatus: verified\ndoc_type: domain\n---\n# Notices\nstatus: not here\n";
+        let expected = FrontMatter {
+            status: Some("verified".into()),
+            title: Some("Notices".into()),
+            doc_type: Some("domain".into()),
+        };
+        assert_eq!(front_matter(page), expected);
+        assert_eq!(front_matter("# No front matter"), FrontMatter::default());
+    }
+
+    #[test]
+    fn navigation_pages_are_no_evidence() {
+        for (inside, doc_type) in [
+            ("index.md", None),
+            ("README.md", Some("overview")),
+            ("project-profile.md", None),
+            ("log.md", None),
+            ("templates/TASK_PROMPT.template.md", None),
+            ("profiles/frontend.md", None),
+            ("start.md", Some("wiki_index")),
+            ("start.md", Some("Wiki-Index")),
+            ("llm-wiki-guide/ai-instructions.md", Some("guide")),
+            ("history.md", Some("changelog")),
+        ] {
+            assert!(navigation_page(inside, doc_type), "{inside} {doc_type:?}");
+        }
+        for (inside, doc_type) in [
+            ("domains/04_requests.md", Some("domain")),
+            ("DOMAIN_FEATURES.md", Some("domain-index")),
+            ("domains/00_overview.md", Some("domain_overview")),
+            ("notices.md", None),
+            ("domains/index.md", Some("domain")),
+        ] {
+            assert!(!navigation_page(inside, doc_type), "{inside} {doc_type:?}");
+        }
     }
 }

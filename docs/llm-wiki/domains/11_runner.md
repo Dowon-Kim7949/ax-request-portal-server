@@ -26,6 +26,8 @@ evidence:
   - crates/api/src/runner/mod.rs#symbol:Runner
   - crates/api/src/runner/mod.rs#symbol:RunError
   - crates/api/src/runner/mod.rs#symbol:unverify_wiki
+  - crates/api/src/runner/mod.rs#symbol:navigation_page
+  - crates/api/src/runner/mod.rs#symbol:front_matter
   - crates/api/src/runner/agent.rs#symbol:run
   - crates/api/src/runner/agent.rs#symbol:report_schema
   - crates/api/src/runner/agent.rs#symbol:work_prompt
@@ -42,8 +44,8 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
+reviewed_at: 2026-11-26
 ---
 
 # Runner
@@ -69,7 +71,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - **Git credentials never reach the agent**: they are injected per git command as an `http.<origin>.extraheader` through `GIT_CONFIG_*` environment variables, not written to the clone, and masked in errors.
 - **Failures** (`RunError`): every failed git command retries (authentication errors included); GitHub REST calls retry on 429, 5xx and network errors and fail on other 4xx; Claude Code that cannot start or breaks off with an I/O error retries; a timeout, a run without a result, an agent that did not finish and a spent budget fail without retry.
 - **Claude Code flags** (`runner/agent.rs#symbol:run`): always `--bare --no-session-persistence --output-format json --json-schema …`, plus `--max-budget-usd <budgetUsd>` when the request has a per-request limit (a remaining budget of 0 fails the run before it starts), the task's key as `ANTHROPIC_API_KEY`, auto-update disabled.
-  - **report** — read-only: `--permission-mode dontAsk` with `Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch` disallowed, on a shallow clone of the default branch. The answer follows a closed schema (`report_schema`). The runner keeps only wiki pages under the project's wiki path and code files that exist, inside the repository, and decides `verified` from each page's front matter — the model cannot vouch for a page.
+  - **report** — read-only: `--permission-mode dontAsk` with `Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch` disallowed, on a shallow clone of the default branch. The answer follows a closed schema (`report_schema`). The runner keeps only wiki pages under the project's wiki path and code files that exist, inside the repository, and decides `verified` from each page's front matter — the model cannot vouch for a page. The wiki's own navigation and bookkeeping pages are dropped from the evidence (`navigation_page`): by `doc_type` (`index`, `wiki_index`, `readme`, `wiki_readme`, `project_profile`, `profile`, `change_log`, `changelog`, `log`, `template`, `guide`, `agent_guide`; case and `-`/`_` ignored) or by the standard layout (`index.md`, `README.md`, `project-profile.md`, `log.md`, `templates/`, `profiles/`). They say nothing about the change, so their review state does not lower wiki trust; a report citing only them has no wiki evidence and is `undetermined`. The prompt asks for pages about the software only.
   - **work** — edits: `--permission-mode bypassPermissions` with only web tools disallowed, so the agent can edit and run tests in the clone. The prompt (`work_prompt`) forbids committing, pushing, merging, opening pull requests, marking wiki pages reviewed or verified, and touching secrets; without git credentials it could not push anyway.
 - **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `editing` → agent → no changed files means outcome `error` with "no files changed" → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
 - **Wiki review state**: `unverify_wiki` turns `status: verified` into `needs_review` in every wiki page the agent changed or added, before committing. This rule lives in the runner, not the server.
@@ -82,7 +84,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 ## Evidence
 
 - `crates/api/src/ai/runner.rs#symbol:authorize`, `crates/api/src/ai/runner.rs#symbol:claim`, `crates/api/src/ai/runner.rs#symbol:heartbeat`, `crates/api/src/ai/runner.rs#symbol:result`, `crates/api/src/ai/runner.rs#symbol:claimed`, `crates/api/src/ai/runner.rs#symbol:LEASE` — server side.
-- `crates/api/src/runner/mod.rs#symbol:Runner`, `crates/api/src/runner/mod.rs#symbol:RunError`, `crates/api/src/runner/mod.rs#symbol:unverify_wiki` — the loop, failures, wiki review state.
+- `crates/api/src/runner/mod.rs#symbol:Runner`, `crates/api/src/runner/mod.rs#symbol:RunError`, `crates/api/src/runner/mod.rs#symbol:unverify_wiki`, `crates/api/src/runner/mod.rs#symbol:front_matter`, `crates/api/src/runner/mod.rs#symbol:navigation_page` — the loop, failures, wiki review state and evidence.
 - `crates/api/src/runner/agent.rs#symbol:run`, `crates/api/src/runner/agent.rs#symbol:report_schema`, `crates/api/src/runner/agent.rs#symbol:work_prompt` — Claude Code invocation.
 - `crates/api/src/runner/github.rs#symbol:pull_request`, `crates/api/src/runner/git.rs#symbol:Git` — pull requests and credentials.
 - `crates/api/src/config.rs#L236-L266` — runner settings (`RunnerConfig`); `crates/api/src/config.rs#L319-L320` — poll and heartbeat intervals.

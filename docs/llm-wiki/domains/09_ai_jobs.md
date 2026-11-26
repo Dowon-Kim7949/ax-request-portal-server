@@ -53,8 +53,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
+reviewed_at: 2026-11-26
 ---
 
 # AI Jobs
@@ -91,7 +91,7 @@ The queue of AI work on requests, the in-process worker, the providers that do t
 
 Used for runner answers, so a model cannot claim more than its evidence:
 
-- `wikiTrust` from the cited wiki pages' review state (decided by the runner from the files, not by the model): all verified → high, at least half → medium, else (or none) → low.
+- `wikiTrust` from the cited wiki pages' review state (decided by the runner from the files, not by the model; the wiki's navigation pages such as the index and project profile are not cited, see [Runner](11_runner.md)): all verified → high, at least half → medium, else (or none) → low.
 - Verdict: `non_code` → `out_of_scope`; no wiki evidence → `undetermined` (plan and scope cleared); a claimed `feasible` stays feasible only with no open questions, trust above low and no rule conflict, otherwise `conditional`.
 - Limits: `WIKI_DOCS_MAX` 10, code files 20, plan 10, scope items 5, questions 3 with 2–4 options; scope ids (`q1`, `q1o1`) are assigned by the server.
 - Work: unknown outcome → `error`; a merge request is kept only with a positive number and an http(s) URL; tests only when all four counts are present (passed clamped to total); `wikiChanges.pendingReview` is always true; regression checks are created only with a merge request, one per screen to recheck.
@@ -109,7 +109,7 @@ Used for runner answers, so a model cannot claim more than its evidence:
 
 ## Open Questions
 
-- Neither the Claude provider nor the runner has been run against the real API or GitHub yet; tests use local fakes.
+- The Claude provider and a runner report have been run against the real API and GitHub (2026-11-24); a runner work run (pushing a branch and opening a pull request) has not yet. Tests use local fakes.
 
 ## Review Notes
 

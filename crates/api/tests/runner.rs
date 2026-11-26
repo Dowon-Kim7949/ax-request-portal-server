@@ -82,6 +82,14 @@ fn remote(root: &Path) -> PathBuf {
     std::fs::create_dir_all(seed.join("src")).unwrap();
     std::fs::write(seed.join("docs/llm-wiki/notices.md"), "---\ntitle: Notices\nstatus: verified\n---\n# Notices\n")
         .unwrap();
+    // Navigation pages the agent reads first; unreviewed, and no evidence.
+    std::fs::write(seed.join("docs/llm-wiki/index.md"), "---\ntitle: Index\nstatus: needs_review\n---\n# Index\n")
+        .unwrap();
+    std::fs::write(
+        seed.join("docs/llm-wiki/start.md"),
+        "---\ntitle: Start\nstatus: needs_review\ndoc_type: wiki_index\n---\n# Start\n",
+    )
+    .unwrap();
     std::fs::write(seed.join("src/notices.txt"), "list\n").unwrap();
     git(&seed, &["init", "-q", "-b", "main"]);
     git(&seed, &["add", "-A"]);
@@ -97,7 +105,12 @@ fn fake_claude(root: &Path) -> PathBuf {
         "usage": { "input_tokens": 1000, "output_tokens": 200 },
         "structured_output": {
             "verdict": "feasible", "summary": "The list can take a title filter.",
-            "wikiDocs": [{ "path": "docs/llm-wiki/notices.md", "title": "x" }, { "path": "docs/llm-wiki/missing.md", "title": "Gone" }],
+            "wikiDocs": [
+                { "path": "docs/llm-wiki/index.md", "title": "Index" },
+                { "path": "docs/llm-wiki/start.md", "title": "Start" },
+                { "path": "docs/llm-wiki/notices.md", "title": "x" },
+                { "path": "docs/llm-wiki/missing.md", "title": "Gone" },
+            ],
             "codeFiles": ["src/notices.txt", "src/gone.txt", "../etc/passwd"],
             "plan": ["Add a filter to the list"],
             "verification": [{ "criterionId": "c1", "automatable": true, "method": "A component test types a word" }],
@@ -193,7 +206,7 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     assert_eq!(
         report["evidence"],
         json!({ "wikiDocs": [{ "path": "docs/llm-wiki/notices.md", "title": "Notices", "verified": true }], "codeFiles": ["src/notices.txt"] }),
-        "only what exists, titled and judged by the page itself"
+        "only what exists and is about the software (no navigation pages), titled and judged by the page itself"
     );
     assert_eq!(report["plan"], json!(["Add a filter to the list"]));
     assert_eq!(shown["scope"]["proposal"]["questions"][0]["recommended"], "q1o1");
