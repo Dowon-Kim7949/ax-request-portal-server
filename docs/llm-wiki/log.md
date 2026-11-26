@@ -24,6 +24,20 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - Deployed; backup and restore written down
+
+- status: needs_review
+- actor: claude-code
+- scope: docs
+- changed:
+  - docs/llm-wiki/OPERATIONS.md: a Backup and restore section (database dump, uploads archive, `.env` copy; restore order); `scripts/smoke.sh` is for throwaway stacks, since its data cannot be deleted
+  - docs/llm-wiki/project-profile.md: the open question about deployment and real runs is answered
+- evidence:
+  - deploy/compose.yaml (the `db` service and the `uploads` volume); the commands were run on a deployment, and a dump was restored into a scratch database
+- caveats:
+  - The edited documents are back to needs_review.
+  - No backup schedule is part of this repository.
+
 ## 2026-11-26 - Compose's published ports are settings
 
 - status: needs_review

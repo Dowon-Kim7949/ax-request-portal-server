@@ -21,6 +21,7 @@ evidence:
   - crates/api/src/config.rs#L236-L266
   - deploy/compose.yaml#L12-L24
   - deploy/compose.yaml#L77-L96
+  - deploy/compose.yaml#L50-L54
   - README.md#section:Configuration
   - .github/workflows/ci.yml#L16-L45
 related:
@@ -30,8 +31,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
+reviewed_at: 2026-11-26
 ---
 
 # Operations
@@ -66,11 +67,30 @@ Runner settings (`AX_RUNNER_SERVER`, `AX_GITHUB_TOKEN`, `AX_GITHUB_API`, `AX_RUN
 - `web` — the frontend built at `FRONTEND_REF` (the same commit as `contract/SOURCE`) against this API (`deploy/web.Dockerfile`: mock off, nginx), open to the network at host port `AX_WEB_PORT` (default `8088`). Both ports are Compose-only settings in `deploy/.env`, for a host where another service already holds the default; `scripts/smoke.sh` then takes `WEB=` and `API=`.
 - `ax-runner` — only with `--profile runner` ([Runner](domains/11_runner.md)).
 
-`docker compose -f deploy/compose.yaml up -d --build --wait && bash scripts/smoke.sh` brings it up and smoke-tests probes, static serving, the `/api` proxy, the error shape, and a sign-in with a CLI-made admin (random password; no fixed accounts).
+`docker compose -f deploy/compose.yaml up -d --build --wait && bash scripts/smoke.sh` brings it up and smoke-tests probes, static serving, the `/api` proxy, the error shape, and a sign-in with a CLI-made admin (random password; no fixed accounts). Each run also adds accounts, a team, a project and a request that cannot be deleted (people and teams never are), so run it against a throwaway stack, not a live one; on a live one check the probes, the web root and `/api/` by hand.
 
 ## Accounts
 
 There are no seeded accounts. The first admin (and every operator) comes from `ax-api user create --email … --name … --role admin` with the password on a prompt or stdin; `ax-api user set-password` resets one. In compose: `docker compose -f deploy/compose.yaml exec ax-backend ax-api user create …`.
+
+## Backup and restore
+
+A deployment's state is the database, the uploaded files and its `deploy/.env`; the images are rebuilt from the repository. Back up all three, and keep the copies private: the dump holds password digests and the attachment link key (`server_secrets`), and `.env` holds the provider keys and tokens.
+
+From the repository directory on the host (`C` = `docker compose -f deploy/compose.yaml`):
+
+1. Database: `$C exec -T db pg_dump -U ax -d ax -Fc > ax-$(date +%F).dump` — one consistent snapshot while the stack runs.
+2. Uploads: `$C exec -T ax-backend tar czf - -C /var/lib/ax/uploads . > uploads-$(date +%F).tgz`.
+3. Settings: a copy of `deploy/.env`, kept apart from the dumps.
+
+Restore onto a stack started with the same `.env`:
+
+1. Stop what writes: `$C stop ax-runner ax-backend`.
+2. Database: `$C exec -T db pg_restore -U ax -d ax --clean --if-exists --no-owner < ax-<date>.dump`.
+3. Uploads: `$C start ax-backend`, then `$C exec -T ax-backend tar xzf - -C /var/lib/ax/uploads < uploads-<date>.tgz`.
+4. `$C --profile runner up -d --wait`; check `/readyz` and a sign-in.
+
+To try a dump without touching the live database, restore it into a scratch database (`createdb`, `pg_restore -d <scratch>`, then `dropdb`). Scheduling backups (cron, copies off the host) is the deployment's own; this repository sets none up.
 
 ## Development and CI
 
@@ -89,7 +109,7 @@ There are no seeded accounts. The first admin (and every operator) comes from `a
 
 ## Open Questions
 
-- No production deployment is described here; organisation deployments keep their settings in a private repository.
+- A deployment's own settings (host, ports, keys) live in its `deploy/.env` on that host, never in this repository; how often it backs up, and where the copies go, is decided there.
 
 ## Review Notes
 
