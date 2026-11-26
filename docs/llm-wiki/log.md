@@ -24,6 +24,21 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - A run that changed nothing is judged by the open pull request
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/runner/mod.rs: a work run with no changed file keeps the open pull request's link and is `success` when tests ran and pass, `tests_failed` when they fail, `error` otherwise or without an open pull request (`Unchanged`)
+  - crates/api/src/runner/github.rs: `open_pull_request` looks the pull request up without opening one
+  - docs/llm-wiki: domains/11_runner
+- evidence:
+  - crates/api/tests/runner.rs (`a_runner_reports_with_evidence_then_opens_a_pull_request`), crates/api/src/runner/mod.rs (`a_run_that_changed_nothing_is_judged_by_the_open_pull_request`)
+- caveats:
+  - The edited document is back to needs_review.
+  - The contract's outcomes are unchanged; a check-only success reads like any other success, told apart by its summary.
+
 ## 2026-11-26 - A work run installs dependencies before it tests
 
 - status: needs_review
