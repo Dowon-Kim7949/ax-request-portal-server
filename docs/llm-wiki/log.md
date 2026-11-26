@@ -24,6 +24,22 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - A refused token costs nothing; a work run shows its whole cost
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/runner/mod.rs: a work run checks with `git push --dry-run` that the token may push before the agent runs
+  - crates/api/src/runner/git.rs: a refused token (401, 403, 404, failed sign-in, no write access) fails without retry (`refused`); git runs with `LC_ALL=C`
+  - crates/api/src/ai/jobs.rs, crates/api/src/ai/usage.rs: `work.costKrw` is every attempt's cost since the run started (`spent_since`), not the last attempt's
+  - docs/llm-wiki: domains/09_ai_jobs, 10_ai_settings_budget, 11_runner, SECURITY
+- evidence:
+  - crates/api/tests/runner.rs (`a_token_that_cannot_push_ends_the_work_before_the_agent_runs`), crates/api/tests/ai.rs (`a_failing_job_is_retried_then_given_up`), crates/api/src/runner/git.rs (`a_refused_token_is_not_tried_again`)
+- caveats:
+  - The edited documents are back to needs_review.
+  - Recognising a refusal reads git's English error text; a message not in the list still retries.
+
 ## 2026-11-26 - Wiki trust counts only pages about the software
 
 - status: needs_review

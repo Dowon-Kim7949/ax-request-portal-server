@@ -31,8 +31,8 @@ related:
   - docs/llm-wiki/OPERATIONS.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
+reviewed_at: 2026-11-26
 ---
 
 # Security
@@ -63,7 +63,7 @@ Uploads are not type-checked; serving is: only `INLINE_TYPES` (images and PDF) o
 
 - The AI cannot send a person's lifecycle event, so it cannot approve scope, merge, results or releases ([Lifecycle](domains/05_lifecycle.md#human-checkpoints)).
 - Runner calls need `AX_RUNNER_TOKEN` (compared as digests) and a live claim; without the token the routes do not exist (`404`).
-- Report runs are read-only (`dontAsk`, editing and shell tools disallowed). Work runs may edit and run commands inside the clone (`bypassPermissions`, web tools disallowed) but receive no git credentials: the runner injects them per git command and masks them in errors. There is no merge call; the GitHub token should hold only Contents and Pull requests write, with the default branch protected. Wiki pages the agent changes go back to `needs_review` ([Runner](domains/11_runner.md)).
+- Report runs are read-only (`dontAsk`, editing and shell tools disallowed). Work runs may edit and run commands inside the clone (`bypassPermissions`, web tools disallowed) but receive no git credentials: the runner injects them per git command and masks them in errors. Before the agent runs, a dry-run push checks that the token may push; a refused token fails the job without retry. There is no merge call; the GitHub token should hold only Contents and Pull requests write, with the default branch protected. Wiki pages the agent changes go back to `needs_review` ([Runner](domains/11_runner.md)).
 - Whoever holds the runner token is trusted: the server accepts the runner's evidence (which wiki pages are verified) as given.
 
 ## Evidence

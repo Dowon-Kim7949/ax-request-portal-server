@@ -53,8 +53,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-26
+reviewed_by: Kim Dowon
 ---
 
 # AI Jobs
@@ -76,7 +76,7 @@ The queue of AI work on requests, the in-process worker, the providers that do t
 ## Applying results
 
 - `apply_report` increments the report `revision`, stamps `generatedAt`, and emits `scopeReady` (request → `scope_check`) only when `AX_SCOPE_CHECK` is on, the verdict is feasible or conditional and a scope proposal exists; otherwise `reportReady` (→ `review`).
-- `apply_work` sets `work.phase = finished`, outcome, summary, cost, merge request, tests, wiki changes, preview, and the regression list when non-empty; emits `workFinished` (→ `code_review`).
+- `apply_work` sets `work.phase = finished`, outcome, summary, cost (`costKrw`: the whole run, every attempt's work calls booked since `work.startedAt`, from `usage::spent_since`), merge request, tests, wiki changes, preview, and the regression list when non-empty; emits `workFinished` (→ `code_review`).
 - The timeline records these events with actor `ai`. Spending (successful or not) is booked to `started_by`: the person who last moved the request into that status, else the requester ([AI Settings and Budget](10_ai_settings_budget.md)).
 - `work` runs with the agent snapshotted on the request when work started; reports resolve the current selection for the project.
 
