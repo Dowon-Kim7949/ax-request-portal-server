@@ -24,6 +24,21 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - Compose's published ports are settings
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - deploy/compose.yaml, deploy/.env.example: the web's and the API's host ports come from `AX_WEB_PORT` (default 8088) and `AX_API_PORT` (default 8080, still on 127.0.0.1 only)
+  - README.md, README.ko.md: the Compose-only settings, ports included
+  - docs/llm-wiki: OPERATIONS, domains/11_runner (the runner service's line range moved)
+- evidence:
+  - deploy/compose.yaml
+- caveats:
+  - The edited documents are back to needs_review.
+  - Ports are read by Compose only; the server's own `AX_BIND` is unchanged.
+
 ## 2026-11-26 - A run that changed nothing is judged by the open pull request
 
 - status: needs_review

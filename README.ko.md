@@ -171,7 +171,7 @@ DB 테스트에는 PostgreSQL이 필요합니다. `scripts/cargo.sh test`가 버
 
 ## 설정
 
-Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설명은 [`deploy/.env.example`](deploy/.env.example)에 있으니 복사해서 쓰면 됩니다. `.env` 파일은 git과 Docker 빌드 컨텍스트 모두에서 제외됩니다.
+Compose로 띄울 때는 설정을 `deploy/.env`에 둡니다. 각 항목의 설명은 [`deploy/.env.example`](deploy/.env.example)에 있으니 복사해서 쓰면 됩니다. `.env` 파일은 git과 Docker 빌드 컨텍스트 모두에서 제외됩니다. Compose만 읽는 값도 있습니다. `POSTGRES_PASSWORD`, `FRONTEND_REF`, 그리고 공개할 호스트 포트인 `AX_WEB_PORT`(기본 `8088`, 네트워크에 공개)와 `AX_API_PORT`(기본 `8080`, `127.0.0.1`에만 공개)입니다. 포트를 바꿨으면 `scripts/smoke.sh`에 같은 주소를 `WEB=`, `API=`로 넘깁니다.
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |

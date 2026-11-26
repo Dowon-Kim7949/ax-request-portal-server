@@ -56,7 +56,8 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:8080"
+      # AX_API_PORT in .env: the host port; only this machine reaches it.
+      - "127.0.0.1:${AX_API_PORT:-8080}:8080"
 
   web:
     build:
@@ -68,7 +69,8 @@ services:
     depends_on:
       - ax-backend
     ports:
-      - "8088:80"
+      # AX_WEB_PORT in .env: the host port people open.
+      - "${AX_WEB_PORT:-8088}:80"
 
   # The runner: Claude Code on clones of the projects' GitHub repositories.
   # Off by default; start it with
