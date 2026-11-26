@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: domain
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -53,8 +53,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
+reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-23
 ---
 
 # AI Jobs
@@ -82,7 +82,7 @@ The queue of AI work on requests, the in-process worker, the providers that do t
 
 ## Providers
 
-- `Provider::report` / `work` return `Reply { outcome: Result<T, Failure>, spend }`; `Failure { message, retry }`. `Spend.cost_usd`, when given, is booked as is instead of from the price table.
+- `Provider::report` / `work` return `Reply { outcome: Result<T, Failure>, spend }`; `Failure { message, retry }`. `Spend.cost_usd`, when given, is booked as is instead of from the price table; `Spend.runtime` is booked as the entry's runtime (`api` for every call the in-process providers make).
 - **Stub** (`AX_AI_PROVIDER=stub`, default): reports honestly that no provider is connected (a hand-over report) and does no work.
 - **Claude** (`AX_AI_PROVIDER=anthropic`): calls the Messages API with `x-api-key` and `anthropic-version` `API_VERSION`; the key comes from `AX_ANTHROPIC_API_KEY_<TASK>`, else `AX_ANTHROPIC_API_KEY`. Reports use effort `high`, JSON-schema output, a cached system prompt, 16,000 max tokens, a 600 s timeout, and `fallbacks: "default"` only for models that accept it (`supports_fallbacks`; Haiku does not). 429, 5xx, network errors and unparsable answers retry; other 4xx do not; a `refusal` or `max_tokens` stop fails without retry but its cost is still booked.
 - **Claude without the runner reads neither code nor wiki**, so the server fixes its verdict: `undetermined` (`out_of_scope` for `non_code` requests), `wikiTrust: low`, empty plan, no scope proposal — it writes the verification method, questions, assumptions, rule conflicts, screens to recheck, size and risks. Its `work` always answers "not connected"; real work needs the [Runner](11_runner.md).

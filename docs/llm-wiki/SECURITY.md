@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: security
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -31,8 +31,8 @@ related:
   - docs/llm-wiki/OPERATIONS.md
 visibility: public
 contains_sensitive_info: false
+reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-23
 ---
 
 # Security

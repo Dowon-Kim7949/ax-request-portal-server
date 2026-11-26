@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 
+use super::settings::API_RUNTIME;
 use super::usage::Tokens;
 use super::{Failure, Job, Provider, Reply, ReportResult, Spend, WorkResult};
 use crate::config::TaskKeys;
@@ -238,7 +239,9 @@ fn tokens(usage: &Value) -> Tokens {
 fn spend_of(body: &Value, requested: &str) -> Vec<Spend> {
     let model = body["model"].as_str().filter(|m| !m.is_empty()).unwrap_or(requested).to_owned();
     match body.get("usage") {
-        Some(usage) if usage.is_object() => vec![Spend { model, tokens: tokens(usage), cost_usd: None }],
+        Some(usage) if usage.is_object() => {
+            vec![Spend { model, runtime: API_RUNTIME, tokens: tokens(usage), cost_usd: None }]
+        }
         _ => Vec::new(),
     }
 }

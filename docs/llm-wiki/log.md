@@ -6,7 +6,7 @@ tags:
 status: needs_review
 doc_type: change_log
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -23,6 +23,23 @@ contains_sensitive_info: false
 # LLM-WIKI Change Log
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
+
+## 2026-11-26 - The usage ledger books how a call actually ran
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/ai/mod.rs, crates/api/src/ai/usage.rs: `Spend` and `Call` carry the call's `runtime`; `book` stores it instead of deriving it from the task
+  - crates/api/src/ai/settings.rs: `agent_runtime(provider)`; `runtime_for` keeps the frontend's per-task default
+  - crates/api/src/ai/runner.rs: a runner's spend is booked as the provider's coding agent for every task, a report included (it was booked as `api`)
+  - crates/api/src/ai/claude.rs, crates/api/src/ai/jobs.rs, crates/api/src/requests/handlers.rs: the server's own calls are booked as `api`
+  - docs/llm-wiki: domains/04_requests, 09_ai_jobs, 10_ai_settings_budget, 11_runner, SECURITY
+- evidence:
+  - crates/api/tests/runner.rs (`a_runner_reports_with_evidence_then_opens_a_pull_request`), crates/api/src/ai/settings.rs (unit tests)
+- caveats:
+  - The edited documents are back to needs_review. SECURITY only cites `runner.rs`; its statements still hold.
+  - Rows booked before this change keep runtime `api` for runner reports; the ledger is never rewritten.
 
 ## 2026-11-23 - Open questions from the first write-up resolved
 

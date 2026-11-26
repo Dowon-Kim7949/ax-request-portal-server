@@ -382,6 +382,7 @@ pub async fn precheck(
                 let call = usage::Call {
                     task: "precheck",
                     selection: &ran,
+                    runtime: s.runtime,
                     request_id: None,
                     user_id: current.user.id,
                     tokens: s.tokens,
