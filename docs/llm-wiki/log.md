@@ -24,6 +24,20 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - A work run is held to the scope the requester confirmed
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/runner/agent.rs: the request brief carries the confirmed scope in words (`confirmed_scope`) instead of the decision's ids; the work prompt says the confirmed scope wins over the plan and open questions
+  - docs/llm-wiki: domains/11_runner
+- evidence:
+  - crates/api/src/runner/agent.rs (`the_confirmed_scope_reaches_the_agent_in_words`), crates/api/tests/runner.rs (`a_runner_reports_with_evidence_then_opens_a_pull_request`)
+- caveats:
+  - The edited document is back to needs_review.
+  - Staying within the scope is asked of the agent, not enforced; the developer still reviews the pull request.
+
 ## 2026-11-26 - A refused token costs nothing; a work run shows its whole cost
 
 - status: needs_review

@@ -270,6 +270,8 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "main"]), "1", "nothing reaches main");
     let log = std::fs::read_to_string(root.join("claude.log")).unwrap();
     assert!(log.lines().any(|l| l.starts_with("edit sk-test-work -p ")), "the work task's key");
+    let edit = &log[log.find("edit sk-test-work").unwrap()..];
+    assert!(edit.contains("Title only") && !edit.contains("q1o1"), "the requester's answer, in words: {edit}");
 
     // A revision continues the branch and the pull request.
     act(&pool, &dev, json!({ "event": "requestRevision", "note": "Also trim spaces" })).await;
