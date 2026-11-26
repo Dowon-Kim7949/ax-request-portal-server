@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: operations
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -20,7 +20,7 @@ evidence:
   - crates/api/src/config.rs#L1-L30
   - crates/api/src/config.rs#L236-L266
   - deploy/compose.yaml#L12-L24
-  - deploy/compose.yaml#L75-L94
+  - deploy/compose.yaml#L77-L96
   - README.md#section:Configuration
   - .github/workflows/ci.yml#L16-L45
 related:
@@ -30,8 +30,8 @@ related:
   - docs/llm-wiki/domains/11_runner.md
 visibility: public
 contains_sensitive_info: false
+reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-23
 ---
 
 # Operations
@@ -62,8 +62,8 @@ Runner settings (`AX_RUNNER_SERVER`, `AX_GITHUB_TOKEN`, `AX_GITHUB_API`, `AX_RUN
 ## The compose stack (`deploy/compose.yaml`)
 
 - `db` — PostgreSQL 18 (alpine) with a health check and the `db-data` volume.
-- `ax-backend` — the API (`deploy/api.Dockerfile`: release build on the pinned Rust image, Debian slim runtime, non-root user). Published on `127.0.0.1:8080` only. The service name is fixed: the frontend's nginx proxies `/api/` to `http://ax-backend:8080/`.
-- `web` — the frontend built at `FRONTEND_REF` (the same commit as `contract/SOURCE`) against this API (`deploy/web.Dockerfile`: mock off, nginx), on port 8088.
+- `ax-backend` — the API (`deploy/api.Dockerfile`: release build on the pinned Rust image, Debian slim runtime, non-root user). Published on `127.0.0.1` only, at host port `AX_API_PORT` (default `8080`). The service name is fixed: the frontend's nginx proxies `/api/` to `http://ax-backend:8080/`.
+- `web` — the frontend built at `FRONTEND_REF` (the same commit as `contract/SOURCE`) against this API (`deploy/web.Dockerfile`: mock off, nginx), open to the network at host port `AX_WEB_PORT` (default `8088`). Both ports are Compose-only settings in `deploy/.env`, for a host where another service already holds the default; `scripts/smoke.sh` then takes `WEB=` and `API=`.
 - `ax-runner` — only with `--profile runner` ([Runner](domains/11_runner.md)).
 
 `docker compose -f deploy/compose.yaml up -d --build --wait && bash scripts/smoke.sh` brings it up and smoke-tests probes, static serving, the `/api` proxy, the error shape, and a sign-in with a CLI-made admin (random password; no fixed accounts).
@@ -81,7 +81,7 @@ There are no seeded accounts. The first admin (and every operator) comes from `a
 ## Evidence
 
 - `crates/api/src/config.rs#L1-L30` — the server settings table; `crates/api/src/config.rs#L236-L266` — the runner's.
-- `deploy/compose.yaml#L12-L24` — the database service; `deploy/compose.yaml#L75-L94` — the runner service.
+- `deploy/compose.yaml#L12-L24` — the database service; `deploy/compose.yaml#L77-L96` — the runner service.
 - `deploy/api.Dockerfile`, `deploy/web.Dockerfile`, `deploy/runner.Dockerfile` — images.
 - `scripts/cargo.sh`, `scripts/smoke.sh` — development and smoke test.
 - `.github/workflows/ci.yml#L16-L45` — the Rust job.

@@ -38,7 +38,7 @@ evidence:
   - crates/api/src/runner/git.rs#symbol:Git
   - crates/api/src/config.rs#L236-L266
   - crates/api/src/config.rs#L319-L320
-  - deploy/compose.yaml#L75-L94
+  - deploy/compose.yaml#L77-L96
 related:
   - docs/llm-wiki/domains/00_overview.md
   - docs/llm-wiki/domains/09_ai_jobs.md
@@ -47,8 +47,8 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-26
+reviewed_by: Kim Dowon
 ---
 
 # Runner
@@ -91,7 +91,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - `crates/api/src/runner/agent.rs#symbol:run`, `crates/api/src/runner/agent.rs#symbol:report_schema`, `crates/api/src/runner/agent.rs#symbol:work_prompt`, `crates/api/src/runner/agent.rs#symbol:confirmed_scope` — Claude Code invocation and the scope it is held to.
 - `crates/api/src/runner/github.rs#symbol:pull_request`, `crates/api/src/runner/github.rs#symbol:open_pull_request`, `crates/api/src/runner/mod.rs#symbol:Unchanged`, `crates/api/src/runner/git.rs#symbol:Git` — pull requests, runs that changed nothing, and credentials.
 - `crates/api/src/config.rs#L236-L266` — runner settings (`RunnerConfig`); `crates/api/src/config.rs#L319-L320` — poll and heartbeat intervals.
-- `deploy/compose.yaml#L75-L94` — the `ax-runner` service.
+- `deploy/compose.yaml#L77-L96` — the `ax-runner` service.
 - Tests: `crates/api/tests/runner.rs` (unix only; fake GitHub, fake `claude`, local bare repository): `a_runner_reports_with_evidence_then_opens_a_pull_request`, `a_token_that_cannot_push_ends_the_work_before_the_agent_runs` (git over HTTP answering `403`), `runner_routes_need_the_token_and_a_live_claim`; `crates/api/src/runner/git.rs` (`a_refused_token_is_not_tried_again`).
 
 ## Open Questions

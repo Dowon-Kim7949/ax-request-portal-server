@@ -129,7 +129,7 @@ These are the service operator's (`operator`, made only with the CLI): `budget:m
 
 ## Configuration
 
-With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy/.env.example), which explains each one. Git ignores `.env` files, and so does the Docker build context.
+With Compose, put settings in `deploy/.env`: copy [`deploy/.env.example`](deploy/.env.example), which explains each one. Git ignores `.env` files, and so does the Docker build context. Compose alone also reads `POSTGRES_PASSWORD`, `FRONTEND_REF` and the published host ports, `AX_WEB_PORT` (default `8088`, open to the network) and `AX_API_PORT` (default `8080`, on `127.0.0.1` only); `scripts/smoke.sh` takes the matching `WEB=` and `API=` URLs.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
