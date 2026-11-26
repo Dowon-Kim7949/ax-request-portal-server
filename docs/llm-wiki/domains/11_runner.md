@@ -33,6 +33,8 @@ evidence:
   - crates/api/src/runner/agent.rs#symbol:work_prompt
   - crates/api/src/runner/agent.rs#symbol:confirmed_scope
   - crates/api/src/runner/github.rs#symbol:pull_request
+  - crates/api/src/runner/github.rs#symbol:open_pull_request
+  - crates/api/src/runner/mod.rs#symbol:Unchanged
   - crates/api/src/runner/git.rs#symbol:Git
   - crates/api/src/config.rs#L236-L266
   - crates/api/src/config.rs#L319-L320
@@ -45,8 +47,8 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_at: 2026-11-26
 reviewed_by: Kim Dowon
+reviewed_at: 2026-11-26
 ---
 
 # Runner
@@ -74,7 +76,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - **Claude Code flags** (`runner/agent.rs#symbol:run`): always `--bare --no-session-persistence --output-format json --json-schema …`, plus `--max-budget-usd <budgetUsd>` when the request has a per-request limit (a remaining budget of 0 fails the run before it starts), the task's key as `ANTHROPIC_API_KEY`, auto-update disabled.
   - **report** — read-only: `--permission-mode dontAsk` with `Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch` disallowed, on a shallow clone of the default branch. The answer follows a closed schema (`report_schema`). The runner keeps only wiki pages under the project's wiki path and code files that exist, inside the repository, and decides `verified` from each page's front matter — the model cannot vouch for a page. The wiki's own navigation and bookkeeping pages are dropped from the evidence (`navigation_page`): by `doc_type` (`index`, `wiki_index`, `readme`, `wiki_readme`, `project_profile`, `profile`, `change_log`, `changelog`, `log`, `template`, `guide`, `agent_guide`; case and `-`/`_` ignored) or by the standard layout (`index.md`, `README.md`, `project-profile.md`, `log.md`, `templates/`, `profiles/`). They say nothing about the change, so their review state does not lower wiki trust; a report citing only them has no wiki evidence and is `undetermined`. The prompt asks for pages about the software only.
   - **work** — edits: `--permission-mode bypassPermissions` with only web tools disallowed, so the agent can edit and run tests in the clone. The prompt (`work_prompt`) forbids committing, pushing, merging, opening pull requests, marking wiki pages reviewed or verified, and touching secrets; without git credentials it could not push anyway. Once the requester has approved a scope, the request brief carries it in words as `confirmedScope` (`confirmed_scope`: the approved summary, changes and unchanged items, each question with the option picked by its label, and the requester's note); the stored decision holds only ids. The prompt tells the agent to stay within it: where the plan or the report's open questions differ, the confirmed scope wins. It also has the agent install the project's dependencies first (the clone is fresh), with the project's own package manager and lockfile and without updating it, restoring any tracked file the install changes; when the tests cannot run it fixes the cause before answering, and `error` covers a change whose tests still could not run.
-- **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `git push --dry-run` to that branch, before the agent spends anything (a token without the right to push fails the job here, at no cost) → `editing` → agent → no changed files means outcome `error` with "no files changed" → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
+- **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `git push --dry-run` to that branch, before the agent spends anything (a token without the right to push fails the job here, at no cost) → `editing` → agent → no changed files commits nothing and is judged by `Unchanged`: when the branch already exists and a pull request from it is open (`open_pull_request`, looked up, never opened), the run checked that pull request and keeps its link; it is `success` if the agent says so and some tests ran ("No file needed changing…"), `tests_failed` if the tests fail, and otherwise `error`; without an open pull request it delivered nothing and is `error` ("The agent changed no files") → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
 - **Wiki review state**: `unverify_wiki` turns `status: verified` into `needs_review` in every wiki page the agent changed or added, before committing. This rule lives in the runner, not the server.
 - **Nothing merges**: there is no merge call; protect the default branch and give the token Contents and Pull requests write only ([Security](../SECURITY.md)).
 
@@ -87,7 +89,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - `crates/api/src/ai/runner.rs#symbol:authorize`, `crates/api/src/ai/runner.rs#symbol:claim`, `crates/api/src/ai/runner.rs#symbol:heartbeat`, `crates/api/src/ai/runner.rs#symbol:result`, `crates/api/src/ai/runner.rs#symbol:claimed`, `crates/api/src/ai/runner.rs#symbol:LEASE` — server side.
 - `crates/api/src/runner/mod.rs#symbol:Runner`, `crates/api/src/runner/mod.rs#symbol:RunError`, `crates/api/src/runner/mod.rs#symbol:unverify_wiki`, `crates/api/src/runner/mod.rs#symbol:front_matter`, `crates/api/src/runner/mod.rs#symbol:navigation_page` — the loop, failures, wiki review state and evidence.
 - `crates/api/src/runner/agent.rs#symbol:run`, `crates/api/src/runner/agent.rs#symbol:report_schema`, `crates/api/src/runner/agent.rs#symbol:work_prompt`, `crates/api/src/runner/agent.rs#symbol:confirmed_scope` — Claude Code invocation and the scope it is held to.
-- `crates/api/src/runner/github.rs#symbol:pull_request`, `crates/api/src/runner/git.rs#symbol:Git` — pull requests and credentials.
+- `crates/api/src/runner/github.rs#symbol:pull_request`, `crates/api/src/runner/github.rs#symbol:open_pull_request`, `crates/api/src/runner/mod.rs#symbol:Unchanged`, `crates/api/src/runner/git.rs#symbol:Git` — pull requests, runs that changed nothing, and credentials.
 - `crates/api/src/config.rs#L236-L266` — runner settings (`RunnerConfig`); `crates/api/src/config.rs#L319-L320` — poll and heartbeat intervals.
 - `deploy/compose.yaml#L75-L94` — the `ax-runner` service.
 - Tests: `crates/api/tests/runner.rs` (unix only; fake GitHub, fake `claude`, local bare repository): `a_runner_reports_with_evidence_then_opens_a_pull_request`, `a_token_that_cannot_push_ends_the_work_before_the_agent_runs` (git over HTTP answering `403`), `runner_routes_need_the_token_and_a_live_claim`; `crates/api/src/runner/git.rs` (`a_refused_token_is_not_tried_again`).

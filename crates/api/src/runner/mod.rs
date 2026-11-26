@@ -15,6 +15,10 @@
 //!   merges: a person does, and the token should not even allow it. A wiki
 //!   page the agent edited is never left marked `verified`: it goes back to
 //!   `needs_review`.
+//! - A work run that changed no file commits nothing. When a pull request from
+//!   an earlier run is open, the run checked it: it keeps that pull request's
+//!   link and succeeds if the tests ran and pass (`tests_failed` if they
+//!   fail); otherwise, it delivered nothing and is an `error` (`Unchanged`).
 //! - A token that is refused (signed out, no right to push, no access to the
 //!   repository) fails the job for good: trying again would only run the
 //!   agent again for nothing (`git::refused`).
@@ -330,16 +334,23 @@ impl Runner {
         let schema = agent::work_schema();
         let (mut answer, spend) = agent::run(&self.agent(job, &clone, &prompt, &schema, Mode::Edit)?).await?;
         let after = |e: RunError| e.with_spend(spend.clone());
+        let github =
+            GitHub { http: &self.http, api: &self.config.github_api, token: self.config.github_token.expose() };
 
         if git.run(&clone, &["status", "--porcelain"]).await.map_err(after)?.is_empty() {
-            answer["outcome"] = json!("error");
-            let none = if job.lang == "en" {
-                "The agent changed no files."
-            } else {
-                "에이전트가 바꾼 파일이 없습니다."
-            };
+            // Nothing to commit. A pull request an earlier run left open is
+            // what this run checked; it stays as it is, and keeps its link.
+            let open =
+                if remote.is_empty() { None } else { github.open_pull_request(&repo, &branch).await.map_err(after)? };
+            let tests_ran =
+                ["existingTotal", "criteriaTotal"].iter().any(|k| answer["tests"][k].as_u64().is_some_and(|n| n > 0));
+            let unchanged = Unchanged::of(answer["outcome"].as_str().unwrap_or("error"), tests_ran, open.is_some());
+            answer["outcome"] = json!(unchanged.outcome());
             let summary = answer["summary"].as_str().unwrap_or_default();
-            answer["summary"] = json!(format!("{none} {summary}").trim().to_owned());
+            answer["summary"] = json!(format!("{} {summary}", unchanged.note(&job.lang)).trim().to_owned());
+            if let Some(pr) = open {
+                answer["mergeRequest"] = pr;
+            }
             return Ok((answer, spend));
         }
         let wiki = job.wiki_path();
@@ -369,8 +380,6 @@ impl Runner {
         let changed = git.run(&clone, &["diff", "--name-only", "HEAD^", "HEAD"]).await.map_err(after)?;
         let docs: Vec<&str> = changed.lines().filter(|f| f.starts_with(&format!("{wiki}/"))).collect();
 
-        let github =
-            GitHub { http: &self.http, api: &self.config.github_api, token: self.config.github_token.expose() };
         let summary = answer["summary"].as_str().unwrap_or_default();
         let body = format!(
             "Request #{id}: {title}\n\n{summary}\n\nOpened by the AX Request Portal's AI. A developer reviews and merges it; \
@@ -381,6 +390,51 @@ impl Runner {
         answer["mergeRequest"] = pr;
         answer["wikiDocs"] = json!(docs);
         Ok((answer, spend))
+    }
+}
+
+/// What a work run that changed no file comes to. With a pull request still
+/// open from an earlier run, the run checked that pull request, so the tests
+/// decide, provided they ran: a success needs tests behind it. Without one,
+/// the run delivered nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Unchanged {
+    /// The open pull request needs no change; the tests pass on it.
+    Confirmed,
+    /// The tests fail on the open pull request.
+    Failing,
+    /// Nothing delivered, or nothing that shows the pull request holds.
+    Nothing,
+}
+
+impl Unchanged {
+    fn of(outcome: &str, tests_ran: bool, open_pull_request: bool) -> Self {
+        match (open_pull_request, outcome) {
+            (true, "success") if tests_ran => Self::Confirmed,
+            (true, "tests_failed") => Self::Failing,
+            _ => Self::Nothing,
+        }
+    }
+
+    fn outcome(self) -> &'static str {
+        match self {
+            Self::Confirmed => "success",
+            Self::Failing => "tests_failed",
+            Self::Nothing => "error",
+        }
+    }
+
+    /// Put before the agent's own summary, in the job's language.
+    fn note(self, lang: &str) -> &'static str {
+        let en = lang == "en";
+        match self {
+            Self::Confirmed if en => "No file needed changing: the tests pass on the open pull request as it is.",
+            Self::Confirmed => "바꿀 파일이 없었습니다. 열려 있는 풀 리퀘스트를 그대로 두고 테스트로 확인했습니다.",
+            Self::Failing if en => "No file was changed, and the tests fail on the open pull request.",
+            Self::Failing => "바꾼 파일이 없고, 열려 있는 풀 리퀘스트에서 테스트가 실패합니다.",
+            Self::Nothing if en => "The agent changed no files.",
+            Self::Nothing => "에이전트가 바꾼 파일이 없습니다.",
+        }
     }
 }
 
@@ -504,6 +558,22 @@ mod tests {
         };
         assert_eq!(front_matter(page), expected);
         assert_eq!(front_matter("# No front matter"), FrontMatter::default());
+    }
+
+    #[test]
+    fn a_run_that_changed_nothing_is_judged_by_the_open_pull_request() {
+        assert_eq!(Unchanged::of("success", true, true), Unchanged::Confirmed);
+        assert_eq!(Unchanged::of("success", false, true), Unchanged::Nothing, "a success needs tests behind it");
+        assert_eq!(Unchanged::of("tests_failed", true, true), Unchanged::Failing);
+        assert_eq!(Unchanged::of("error", true, true), Unchanged::Nothing);
+        for outcome in ["success", "tests_failed", "error"] {
+            assert_eq!(Unchanged::of(outcome, true, false), Unchanged::Nothing, "no pull request: nothing delivered");
+        }
+        assert_eq!(
+            [Unchanged::Confirmed, Unchanged::Failing, Unchanged::Nothing].map(Unchanged::outcome),
+            ["success", "tests_failed", "error"]
+        );
+        assert!(Unchanged::Nothing.note("ko").starts_with("에이전트가 바꾼 파일이 없습니다"));
     }
 
     #[test]

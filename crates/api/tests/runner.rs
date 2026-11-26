@@ -127,7 +127,8 @@ fn fake_claude(root: &Path) -> PathBuf {
         "#!/usr/bin/env bash\nmode=read\nfor a in \"$@\"; do [ \"$a\" = bypassPermissions ] && mode=edit; done\n\
          echo \"$mode $ANTHROPIC_API_KEY $*\" >> '{log}'\n\
          if [ $mode = read ]; then\ncat <<'JSON'\n{report}\nJSON\nelse\n\
-         echo searchable >> src/notices.txt\necho 'Search by title.' >> docs/llm-wiki/notices.md\n\
+         case \"$*\" in *'Only check it'*) ;; *) echo searchable >> src/notices.txt\n\
+         echo 'Search by title.' >> docs/llm-wiki/notices.md;; esac\n\
          cat <<'JSON'\n{work}\nJSON\nfi\n",
         log = log.display()
     );
@@ -280,6 +281,21 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     assert_eq!(created.lock().unwrap().len(), 1, "the open pull request is reused");
     assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "main..ax/request-1"]), "2");
     assert!(std::fs::read_to_string(root.join("claude.log")).unwrap().contains("Also trim spaces"));
+
+    // A run that only checks the pull request changes nothing; its tests pass,
+    // so it succeeds, and the request keeps the pull request's link.
+    act(&pool, &dev, json!({ "event": "requestRevision", "note": "Only check it" })).await;
+    assert_eq!(runner.run_once().await, Ok(true));
+    let shown = request(&pool, &dev).await;
+    let work = &shown["work"];
+    assert_eq!(
+        (&shown["status"], &work["outcome"], &work["attempt"]),
+        (&json!("code_review"), &json!("success"), &json!(3))
+    );
+    assert!(work["summary"].as_str().unwrap().starts_with("No file needed changing"), "{work}");
+    assert_eq!(work["mergeRequest"]["number"], 12, "the link to the pull request stays");
+    assert_eq!(created.lock().unwrap().len(), 1, "none opened");
+    assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "main..ax/request-1"]), "2", "nothing pushed");
     assert_eq!(runner.run_once().await, Ok(false), "nothing left");
     let booked: Vec<(String, String)> =
         sqlx::query_as("select distinct task, runtime from ai_usage order by task").fetch_all(&pool).await.unwrap();
