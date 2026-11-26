@@ -2,8 +2,8 @@
 title: Runner
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
 last_updated: 2026-11-26
@@ -44,7 +44,6 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-26
 ---
 
@@ -69,11 +68,11 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - `ax-api runner` (`RunnerConfig`): `AX_RUNNER_SERVER`, `AX_RUNNER_TOKEN`, `AX_GITHUB_TOKEN`, a Claude key (`AX_ANTHROPIC_API_KEY` or the per-task ones) required; `AX_GITHUB_API` (default the public GitHub API), `AX_RUNNER_WORKDIR`, `AX_RUNNER_TIMEOUT` (30m), `AX_CLAUDE_BIN` optional. Polls every 5 s, heartbeats every 60 s, one job at a time in `job-<id>-<first 8 characters of the claim>` (deleted afterwards).
 - Only `github` projects with an `http(s)://host/owner/repo` URL (a `.git` suffix is allowed) are processed; others fail without retry.
 - **Git credentials never reach the agent**: they are injected per git command as an `http.<origin>.extraheader` through `GIT_CONFIG_*` environment variables, not written to the clone, and masked in errors.
-- **Failures** (`RunError`): every failed git command retries (authentication errors included); GitHub REST calls retry on 429, 5xx and network errors and fail on other 4xx; Claude Code that cannot start or breaks off with an I/O error retries; a timeout, a run without a result, an agent that did not finish and a spent budget fail without retry.
+- **Failures** (`RunError`): a failed git command retries, except when the token is refused (`git::refused`: HTTP 401, 403 or 404, "Authentication failed", "Write access to repository not granted", "Repository not found", "denied to"; git runs with `LC_ALL=C` so the messages are English): that fails without retry, since another attempt would only run the agent again and be refused again; GitHub REST calls retry on 429, 5xx and network errors and fail on other 4xx; Claude Code that cannot start or breaks off with an I/O error retries; a timeout, a run without a result, an agent that did not finish and a spent budget fail without retry.
 - **Claude Code flags** (`runner/agent.rs#symbol:run`): always `--bare --no-session-persistence --output-format json --json-schema …`, plus `--max-budget-usd <budgetUsd>` when the request has a per-request limit (a remaining budget of 0 fails the run before it starts), the task's key as `ANTHROPIC_API_KEY`, auto-update disabled.
   - **report** — read-only: `--permission-mode dontAsk` with `Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch` disallowed, on a shallow clone of the default branch. The answer follows a closed schema (`report_schema`). The runner keeps only wiki pages under the project's wiki path and code files that exist, inside the repository, and decides `verified` from each page's front matter — the model cannot vouch for a page. The wiki's own navigation and bookkeeping pages are dropped from the evidence (`navigation_page`): by `doc_type` (`index`, `wiki_index`, `readme`, `wiki_readme`, `project_profile`, `profile`, `change_log`, `changelog`, `log`, `template`, `guide`, `agent_guide`; case and `-`/`_` ignored) or by the standard layout (`index.md`, `README.md`, `project-profile.md`, `log.md`, `templates/`, `profiles/`). They say nothing about the change, so their review state does not lower wiki trust; a report citing only them has no wiki evidence and is `undetermined`. The prompt asks for pages about the software only.
   - **work** — edits: `--permission-mode bypassPermissions` with only web tools disallowed, so the agent can edit and run tests in the clone. The prompt (`work_prompt`) forbids committing, pushing, merging, opening pull requests, marking wiki pages reviewed or verified, and touching secrets; without git credentials it could not push anyway.
-- **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `editing` → agent → no changed files means outcome `error` with "no files changed" → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
+- **Work flow**: branch `ax/request-<id>` (or the one already on the request; a revision continues the same branch and pull request) → `git push --dry-run` to that branch, before the agent spends anything (a token without the right to push fails the job here, at no cost) → `editing` → agent → no changed files means outcome `error` with "no files changed" → `unverify_wiki` → `opening_mr` → commit `[AX #<id>] <title> (run <attempt>)` → push → reuse the open pull request for the branch or open one against the default branch (`pull_request`) → report size and changed wiki pages.
 - **Wiki review state**: `unverify_wiki` turns `status: verified` into `needs_review` in every wiki page the agent changed or added, before committing. This rule lives in the runner, not the server.
 - **Nothing merges**: there is no merge call; protect the default branch and give the token Contents and Pull requests write only ([Security](../SECURITY.md)).
 
@@ -89,7 +88,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - `crates/api/src/runner/github.rs#symbol:pull_request`, `crates/api/src/runner/git.rs#symbol:Git` — pull requests and credentials.
 - `crates/api/src/config.rs#L236-L266` — runner settings (`RunnerConfig`); `crates/api/src/config.rs#L319-L320` — poll and heartbeat intervals.
 - `deploy/compose.yaml#L75-L94` — the `ax-runner` service.
-- Tests: `crates/api/tests/runner.rs` (unix only; fake GitHub, fake `claude`, local bare repository): `a_runner_reports_with_evidence_then_opens_a_pull_request`, `runner_routes_need_the_token_and_a_live_claim`.
+- Tests: `crates/api/tests/runner.rs` (unix only; fake GitHub, fake `claude`, local bare repository): `a_runner_reports_with_evidence_then_opens_a_pull_request`, `a_token_that_cannot_push_ends_the_work_before_the_agent_runs` (git over HTTP answering `403`), `runner_routes_need_the_token_and_a_live_claim`; `crates/api/src/runner/git.rs` (`a_refused_token_is_not_tried_again`).
 
 ## Open Questions
 

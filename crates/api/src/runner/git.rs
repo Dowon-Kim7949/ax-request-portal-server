@@ -54,6 +54,8 @@ impl Git<'_> {
             .args(args)
             .current_dir(dir)
             .env("GIT_TERMINAL_PROMPT", "0")
+            // English messages, which `refused` reads.
+            .env("LC_ALL", "C")
             .env("GIT_CONFIG_COUNT", config.len().to_string());
         for (i, (key, value)) in config.iter().enumerate() {
             command.env(format!("GIT_CONFIG_KEY_{i}"), key).env(format!("GIT_CONFIG_VALUE_{i}"), value);
@@ -65,9 +67,26 @@ impl Git<'_> {
             let stderr = String::from_utf8_lossy(&out.stderr);
             // Never repeat the token, should git print it.
             let stderr = stderr.replace(self.token, "***");
-            Err(RunError::retry(format!("git {} failed: {}", args.first().unwrap_or(&""), stderr.trim())))
+            let message = format!("git {} failed: {}", args.first().unwrap_or(&""), stderr.trim());
+            Err(if refused(&stderr) { RunError::fail(message) } else { RunError::retry(message) })
         }
     }
+}
+
+/// Whether git failed because the token may not do this, which trying again
+/// does not change: a failed sign-in, a token without the right to push, or a
+/// repository it cannot see (GitHub answers a private one with 404).
+fn refused(stderr: &str) -> bool {
+    const SIGNS: [&str; 7] = [
+        "The requested URL returned error: 401",
+        "The requested URL returned error: 403",
+        "The requested URL returned error: 404",
+        "Authentication failed",
+        "Write access to repository not granted",
+        "Repository not found",
+        "denied to",
+    ];
+    SIGNS.iter().any(|sign| stderr.contains(sign))
 }
 
 #[cfg(test)]
@@ -81,6 +100,25 @@ mod tests {
         assert_eq!(Repo::parse("https://ghe.example.com/team/app/").unwrap().name, "app");
         for bad in ["git@github.com:acme/portal.git", "https://github.com/acme", "https://github.com/a/b/c", "nope"] {
             assert_eq!(Repo::parse(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_refused_token_is_not_tried_again() {
+        for refusal in [
+            "remote: Write access to repository not granted.\nfatal: unable to access 'https://github.com/acme/portal/': The requested URL returned error: 403",
+            "fatal: Authentication failed for 'https://github.com/acme/portal/'",
+            "remote: Repository not found.\nfatal: repository 'https://github.com/acme/portal/' not found",
+            "remote: Permission to acme/portal.git denied to someone.",
+        ] {
+            assert!(refused(refusal), "{refusal}");
+        }
+        for passing in [
+            "fatal: unable to access 'https://github.com/acme/portal/': Could not resolve host: github.com",
+            "fatal: unable to access 'https://github.com/acme/portal/': The requested URL returned error: 502",
+            "error: failed to push some refs to 'https://github.com/acme/portal'",
+        ] {
+            assert!(!refused(passing), "{passing}");
         }
     }
 }

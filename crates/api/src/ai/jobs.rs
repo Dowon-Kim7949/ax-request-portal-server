@@ -298,7 +298,15 @@ pub async fn complete(
     let at = store::now_iso(&mut *tx).await?;
     let event = match done {
         Done::Report(result) => apply_report(&mut request, result, &at, settings),
-        Done::Work(result) => apply_work(&mut request, result, &at, cost_krw),
+        Done::Work(result) => {
+            // The run's cost is every attempt's, not just this one's.
+            let started = request.details["work"]["startedAt"].as_str().map(str::to_owned);
+            let run_cost = match started {
+                Some(since) => usage::spent_since(&mut *tx, request.id, "work", &since).await?,
+                None => cost_krw,
+            };
+            apply_work(&mut request, result, &at, run_cost)
+        }
     };
     let from = request.status;
     request.status = event.rule().to;
@@ -406,7 +414,8 @@ fn apply_report(request: &mut StoredRequest, result: super::ReportResult, at: &s
     }
 }
 
-/// Closes the work run with the provider's result and what it cost.
+/// Closes the work run with the provider's result and what the whole run
+/// cost, every attempt included.
 fn apply_work(request: &mut StoredRequest, result: super::WorkResult, at: &str, cost_krw: f64) -> Event {
     let d = &mut request.details;
     let mut work = field(d, "work").clone();

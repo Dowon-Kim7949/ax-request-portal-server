@@ -9,7 +9,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use ax_api::ai::jobs::{MAX_ATTEMPTS, run_pending};
-use ax_api::ai::{Job, Provider, Reply, ReportResult, StubProvider, WorkResult};
+use ax_api::ai::usage::Tokens;
+use ax_api::ai::{Job, Provider, Reply, ReportResult, Spend, StubProvider, WorkResult};
 use ax_api::config::AiSettings;
 use ax_api::requests::store::StoredRequest;
 use ax_api::roles::Role;
@@ -237,7 +238,7 @@ async fn a_feasible_report_asks_the_requester_first(pool: PgPool) {
     assert_eq!((&request["status"], &request["report"]["revision"]), (&json!("review"), &json!(2)));
 }
 
-/// A provider that always fails.
+/// A provider that always fails; each work attempt costs $1 (1,400 won) first.
 struct Broken;
 
 impl Provider for Broken {
@@ -245,8 +246,14 @@ impl Provider for Broken {
         Reply::retry("the model is down")
     }
 
-    async fn work(&self, _: &StoredRequest, _: &Job) -> Reply<WorkResult> {
-        Reply::retry("the model is down")
+    async fn work(&self, _: &StoredRequest, job: &Job) -> Reply<WorkResult> {
+        let spend = Spend {
+            model: job.selection.model.clone(),
+            runtime: "claude_code",
+            tokens: Tokens::default(),
+            cost_usd: Some(1.0),
+        };
+        Reply::retry("the model is down").with_spend(vec![spend])
     }
 }
 
@@ -292,4 +299,16 @@ async fn a_failing_job_is_retried_then_given_up(pool: PgPool) {
         request["work"]["summary"],
         "The AI work run failed and changed no code. Run it again, or do the work by hand."
     );
+    assert_eq!(request["work"]["costKrw"], json!(1400 * MAX_ATTEMPTS), "every attempt's cost, not the last one's");
+
+    // The next run's cost is its own.
+    let revise = json!({ "event": "requestRevision", "note": "Try again" });
+    let (status, _) = send(&pool, "POST", "/requests/1/transitions", Some(&w.dev), "en", Some(revise)).await;
+    assert_eq!(status, StatusCode::OK);
+    for _ in 1..=MAX_ATTEMPTS {
+        sqlx::query("update ai_jobs set run_after = now()").execute(&pool).await.unwrap();
+        run_pending(&pool, &Broken, &settings()).await.unwrap();
+    }
+    let request = get(&pool, &w.dev).await;
+    assert_eq!((&request["work"]["attempt"], &request["work"]["costKrw"]), (&json!(2), &json!(1400 * MAX_ATTEMPTS)));
 }

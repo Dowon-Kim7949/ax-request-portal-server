@@ -137,7 +137,15 @@ fn fake_claude(root: &Path) -> PathBuf {
     path
 }
 
-fn runner(server: &str, github: &str, root: &Path, bare: &Path, claude: &Path) -> Runner {
+/// Git over HTTP that refuses to take pushes, as GitHub answers a token
+/// without the right to push.
+async fn refusing_git() -> String {
+    let refuse = || async { (StatusCode::FORBIDDEN, "Write access to repository not granted.\n") };
+    serve(Router::new().route("/acme/portal/info/refs", get(refuse))).await
+}
+
+/// A runner on the local repository; pushes go to `push` instead, when given.
+fn runner(server: &str, github: &str, root: &Path, bare: &Path, claude: &Path, push: Option<&str>) -> Runner {
     let mut config = RunnerConfig::from_lookup(|name| {
         match name {
             "AX_RUNNER_SERVER" => Some(server),
@@ -157,6 +165,11 @@ fn runner(server: &str, github: &str, root: &Path, bare: &Path, claude: &Path) -
         (format!("url.file://{}.insteadOf", bare.display()), "https://github.com/acme/portal".to_owned()),
         ("protocol.file.allow".to_owned(), "always".to_owned()),
     ];
+    if let Some(push) = push {
+        config
+            .git_config
+            .push((format!("url.{push}/acme/portal.pushInsteadOf"), "https://github.com/acme/portal".to_owned()));
+    }
     Runner::new(config)
 }
 
@@ -169,32 +182,38 @@ async fn act(pool: &PgPool, token: &str, body: Value) {
     assert_eq!(status, StatusCode::OK, "{answer}");
 }
 
-#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
-async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) {
-    let root = tempdir();
-    let (_, admin) = signed_in(&pool, "admin@example.com", Role::Admin).await;
-    let (dev_user, dev) = signed_in(&pool, "dev@example.com", Role::Developer).await;
-    let (_, requester) = signed_in(&pool, "req@example.com", Role::Requester).await;
+/// A GitHub project and a change request filed against it; the developer's
+/// and the requester's sessions.
+async fn filed(pool: &PgPool) -> (String, String) {
+    let (_, admin) = signed_in(pool, "admin@example.com", Role::Admin).await;
+    let (dev_user, dev) = signed_in(pool, "dev@example.com", Role::Developer).await;
+    let (_, requester) = signed_in(pool, "req@example.com", Role::Requester).await;
     let project = json!({
         "name": "Portal", "description": "Notice board", "icon": "globe",
         "repository": { "provider": "github", "url": "https://github.com/acme/portal" },
         "wikiPath": "docs/llm-wiki", "ownerIds": [dev_user.id.to_string()],
         "targets": [{ "name": "Notices" }, { "name": "Search" }], "constraints": [], "active": true,
     });
-    let (_, project) = send(&pool, "POST", "/projects", Some(&admin), "en", Some(project)).await;
+    let (_, project) = send(pool, "POST", "/projects", Some(&admin), "en", Some(project)).await;
     let filed = json!({
         "projectId": project["id"], "type": "change", "title": "Search notices", "targetIds": [project["targets"][0]["id"]],
         "currentBehavior": "", "desiredBehavior": "Find notices by title",
         "acceptanceCriteria": [{ "text": "When I type a word, matching notices show" }], "attachmentIds": [],
     });
-    let (status, _) = send(&pool, "POST", "/requests", Some(&requester), "en", Some(filed)).await;
+    let (status, _) = send(pool, "POST", "/requests", Some(&requester), "en", Some(filed)).await;
     assert_eq!(status, StatusCode::CREATED);
+    (dev, requester)
+}
 
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) {
+    let root = tempdir();
+    let (dev, requester) = filed(&pool).await;
     let server = api(&pool, Some(TOKEN)).await;
     let (github, created) = github().await;
     let bare = remote(&root);
     let claude = fake_claude(&root);
-    let runner = runner(&server, &github, &root, &bare, &claude);
+    let runner = runner(&server, &github, &root, &bare, &claude, None);
 
     // The report, read from the code and the reviewed wiki page.
     assert_eq!(runner.run_once().await, Ok(true));
@@ -263,6 +282,40 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     let booked: Vec<(String, String)> =
         sqlx::query_as("select distinct task, runtime from ai_usage order by task").fetch_all(&pool).await.unwrap();
     assert_eq!(booked, [("report".into(), "claude_code".into()), ("work".into(), "claude_code".into())]);
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_token_that_cannot_push_ends_the_work_before_the_agent_runs(pool: PgPool) {
+    let root = tempdir();
+    let (dev, requester) = filed(&pool).await;
+    let server = api(&pool, Some(TOKEN)).await;
+    let (github, created) = github().await;
+    let bare = remote(&root);
+    let claude = fake_claude(&root);
+    let refusing = refusing_git().await;
+    let runner = runner(&server, &github, &root, &bare, &claude, Some(&refusing));
+    assert_eq!(runner.run_once().await, Ok(true), "the report only reads");
+    act(&pool, &requester, json!({ "event": "approveScope", "choices": [{ "questionId": "q1", "optionId": "q1o1" }] }))
+        .await;
+    act(&pool, &dev, json!({ "event": "runWork", "checkedAssumptions": ["a1"] })).await;
+
+    assert_eq!(runner.run_once().await, Ok(true));
+    let log = std::fs::read_to_string(root.join("claude.log")).unwrap();
+    assert!(!log.lines().any(|l| l.starts_with("edit ")), "the agent never ran: {log}");
+    let (status, attempts, error): (String, i32, String) =
+        sqlx::query_as("select status, attempts, error from ai_jobs where task = 'work'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((status.as_str(), attempts), ("failed", 1), "not tried again: it would only refuse again");
+    assert!(error.contains("cannot push") && error.contains("403"), "{error}");
+    let work_calls: i64 =
+        sqlx::query_scalar("select count(*) from ai_usage where task = 'work'").fetch_one(&pool).await.unwrap();
+    assert_eq!(work_calls, 0, "nothing spent");
+    let shown = request(&pool, &dev).await;
+    assert_eq!((&shown["status"], &shown["work"]["outcome"]), (&json!("code_review"), &json!("error")));
+    assert!(created.lock().unwrap().is_empty(), "no pull request");
+    assert_eq!(runner.run_once().await, Ok(false), "nothing left");
 }
 
 #[sqlx::test(migrator = "ax_api::db::MIGRATOR")]

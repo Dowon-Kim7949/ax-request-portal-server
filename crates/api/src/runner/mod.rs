@@ -8,11 +8,16 @@
 //!   each page's review state from its front matter; the server decides what
 //!   the report may claim from that (`ai::agent`).
 //! - A **work run** checks out the run's branch (`ax/request-<id>`, continued
-//!   by later runs), lets the agent edit and test, commits what it changed,
-//!   pushes the branch and opens (or reuses) the pull request. The agent holds
-//!   no git credentials; the runner pushes. Nothing merges: a person does, and
-//!   the token should not even allow it. A wiki page the agent edited is never
-//!   left marked `verified`: it goes back to `needs_review`.
+//!   by later runs), checks with a dry-run push that the token may push there
+//!   before the agent spends anything, lets the agent edit and test, commits
+//!   what it changed, pushes the branch and opens (or reuses) the pull
+//!   request. The agent holds no git credentials; the runner pushes. Nothing
+//!   merges: a person does, and the token should not even allow it. A wiki
+//!   page the agent edited is never left marked `verified`: it goes back to
+//!   `needs_review`.
+//! - A token that is refused (signed out, no right to push, no access to the
+//!   repository) fails the job for good: trying again would only run the
+//!   agent again for nothing (`git::refused`).
 //!
 //! The runner has no database access. It talks to the server over HTTP
 //! (`ai::runner`), renews its claim while it works, and reports what each run
@@ -313,6 +318,12 @@ impl Runner {
             git.run(&clone, &["fetch", "--depth", "50", "origin", &refspec]).await?;
             git.run(&clone, &["checkout", "-b", &branch, &format!("origin/{branch}")]).await?;
         }
+        // Before the agent spends anything: may the token push here? A dry run
+        // asks the remote for the right to push and sends nothing, so a token
+        // without it ends the run now, at no cost, instead of after the edit.
+        git.run(&clone, &["push", "--dry-run", "origin", &format!("HEAD:refs/heads/{branch}")])
+            .await
+            .map_err(|e| RunError { message: format!("the token cannot push to {}: {}", repo.url, e.message), ..e })?;
 
         self.set_phase(job, phase, "editing").await;
         let prompt = agent::work_prompt(&job.request, &job.project, &job.lang);

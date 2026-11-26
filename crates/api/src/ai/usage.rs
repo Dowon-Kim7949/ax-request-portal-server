@@ -236,6 +236,31 @@ pub async fn for_request(db: &mut PgConnection, time_zone: &str, request_id: i64
     rows.iter().map(Entry::from_row).collect()
 }
 
+/// The won booked against a request's `task` since `since` (an ISO instant):
+/// what a work run cost across all its attempts, the ones that failed and
+/// were tried again included. Runs of one request never overlap, so every
+/// work call after the run started is the run's.
+///
+/// # Errors
+///
+/// Database failures.
+pub async fn spent_since(
+    db: impl sqlx::PgExecutor<'_>,
+    request_id: i64,
+    task: &str,
+    since: &str,
+) -> Result<f64, sqlx::Error> {
+    sqlx::query_scalar(
+        "select coalesce(sum(cost_krw), 0)::float8 from ai_usage
+          where request_id = $1 and task = $2 and at >= $3::timestamptz",
+    )
+    .bind(request_id)
+    .bind(task)
+    .bind(since)
+    .fetch_one(db)
+    .await
+}
+
 /// Every call booked in `month` (`YYYY-MM`) on the business calendar, in
 /// booking order.
 ///
