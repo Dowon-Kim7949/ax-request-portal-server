@@ -159,7 +159,8 @@ Answer in the given JSON schema:
 open questions or assumptions are settled or a project rule is at stake; undetermined when you could not tell; \
 out_of_scope when it is not a change to this software.
 - summary: two or three plain sentences for the developer.
-- wikiDocs: the wiki pages you relied on, by path from the repository root, with their titles.
+- wikiDocs: the wiki pages about this software you relied on, by path from the repository root, with their titles; \
+not the wiki's own index, README, profiles, log, templates or guides.
 - codeFiles: the source files the change would touch, by path from the repository root.
 - plan: the steps of the change.
 - verification: for each acceptance criterion, by its id, whether an automated test could check it, and how.

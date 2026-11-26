@@ -2,11 +2,11 @@
 title: Glossary
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: glossary
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -22,7 +22,6 @@ related:
   - docs/llm-wiki/domains/05_lifecycle.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-23
 ---
 
@@ -51,7 +50,7 @@ Terms as this server uses them. Contract names (camelCase) are the frontend's; R
 | Provider | Who runs AI calls: `stub` (honest no-op), `anthropic` (Claude); `openai` exists only in settings and is never connected. |
 | Runner | The `ax-api runner` process that claims jobs and runs Claude Code on GitHub clones ([Runner](domains/11_runner.md)). |
 | Claim / lease | A runner's hold on a job: a claim id valid for a 10-minute lease, renewed by heartbeats. |
-| Wiki trust | `high` / `medium` / `low` from how many of the cited wiki pages are `verified`. |
+| Wiki trust | `high` / `medium` / `low` from how many of the cited wiki pages are `verified`; the wiki's own navigation pages (index, README, profiles, log, templates, guides) are never cited. |
 | Ledger | `ai_usage`: one row per AI call, priced at booking, with the caller's team at call time ([AI Settings and Budget](domains/10_ai_settings_budget.md)). |
 | Business date | A date in `AX_TIME_ZONE` (default `Asia/Seoul`): "today", months, release dates. |
 | Setup link | A one-time `axl_` link through which a person added in the app sets their password. |

@@ -24,6 +24,21 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-26 - Wiki trust counts only pages about the software
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - crates/api/src/runner/mod.rs: a report's wiki evidence leaves out the wiki's own navigation and bookkeeping pages (`navigation_page`, by `doc_type` or standard path); `front_matter` also reads `doc_type`
+  - crates/api/src/runner/agent.rs: the report prompt asks for pages about the software, not the index, README, profiles, log, templates or guides
+  - docs/llm-wiki: domains/09_ai_jobs, 11_runner, GLOSSARY
+- evidence:
+  - crates/api/tests/runner.rs (`a_runner_reports_with_evidence_then_opens_a_pull_request`), crates/api/src/runner/mod.rs (`navigation_pages_are_no_evidence`)
+- caveats:
+  - The edited documents are back to needs_review.
+  - The trust thresholds themselves (the frontend's `deriveWikiTrust`) are unchanged.
+
 ## 2026-11-26 - The usage ledger books how a call actually ran
 
 - status: needs_review
