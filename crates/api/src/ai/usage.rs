@@ -11,7 +11,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{PgConnection, Row};
 use uuid::Uuid;
 
-use super::settings::{self, BudgetLimits, ModelPrice, PROVIDERS, Pricing, Selection, TASKS, runtime_for};
+use super::settings::{self, BudgetLimits, ModelPrice, PROVIDERS, Pricing, Selection, TASKS};
 use crate::auth::token;
 use crate::requests::store::iso;
 
@@ -154,6 +154,10 @@ impl Entry {
 pub struct Call<'a> {
     pub task: &'a str,
     pub selection: &'a Selection,
+    /// How the call ran (the contract's `AiRuntime`): `api` for a call this
+    /// server made, the provider's coding agent for a runner's run, whatever
+    /// the task (`Spend::runtime`).
+    pub runtime: &'a str,
     /// `None` for a precheck, which runs before the request exists.
     pub request_id: Option<i64>,
     /// The person whose action started the call.
@@ -203,7 +207,7 @@ pub async fn book(db: &mut PgConnection, time_zone: &str, call: &Call<'_>) -> Re
     .bind(call.task)
     .bind(&call.selection.provider)
     .bind(&call.selection.model)
-    .bind(runtime_for(call.task, &call.selection.provider))
+    .bind(call.runtime)
     .bind(call.request_id)
     .bind(call.user_id)
     .bind(call.tokens.input)
@@ -408,6 +412,7 @@ pub fn report_json(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::settings::runtime_for;
 
     fn tokens(input: i64, cache_read: i64, cache_write: i64, output: i64) -> Tokens {
         Tokens { input, cache_read, cache_write, output, reasoning: None }

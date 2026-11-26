@@ -2,11 +2,11 @@
 title: Runner
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -42,7 +42,6 @@ related:
   - docs/llm-wiki/SECURITY.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-23
 ---
 
@@ -59,7 +58,7 @@ Running report and work jobs with Claude Code on a clone of the project's GitHub
 - **Auth** (`authorize`): `Authorization: Bearer <AX_RUNNER_TOKEN>`, compared as SHA-256 digests; missing or wrong → `401`.
 - **Claim**: `204` when nothing is due; else `{ job { id, claim, task, lang, attempt, leaseSeconds }, selection, budgetUsd, request, project }`. A claim leases the job for `LEASE` (10 minutes) under a fresh claim id; `budgetUsd` is what is left of the per-request limit in USD (null when unlimited). A job already past `MAX_ATTEMPTS` is failed as "the runner stopped answering" instead of handed out.
 - **Heartbeat** `{ claim, phase? }` extends the lease and, for work, records `editing | testing | opening_mr` in `details.work.phase`.
-- **Result** `{ claim, report | work | failure, spend[] }`; a body without the task's key fails retryably. Only the live claim is accepted (`claimed`): a late answer from a runner whose lease expired is `409`.
+- **Result** `{ claim, report | work | failure, spend[] }`; a body without the task's key fails retryably. Every `spend` item is booked with the provider's coding-agent runtime (`agent_runtime`, `claude_code` for anthropic), a report included: a runner always runs the agent, never a single API call. Only the live claim is accepted (`claimed`): a late answer from a runner whose lease expired is `409`.
 - **Lease expiry**: an expired running job is claimable again by the next claim, counting another attempt; after three, it is given up and handed to a person.
 
 ## Runner process

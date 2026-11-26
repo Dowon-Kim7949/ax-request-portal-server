@@ -236,6 +236,7 @@ async fn usage_is_reported_and_stops_a_request_at_its_limit(pool: PgPool) {
     let report = Call {
         task: "report",
         selection: &opus,
+        runtime: "api",
         request_id: Some(1),
         user_id: requester_user.id,
         tokens: Tokens { input: 1_000_000, ..Tokens::default() },
@@ -247,6 +248,7 @@ async fn usage_is_reported_and_stops_a_request_at_its_limit(pool: PgPool) {
     let precheck = Call {
         task: "precheck",
         selection: &haiku,
+        runtime: "api",
         request_id: None,
         user_id: requester_user.id,
         tokens: Tokens { input: 10_000, output: 2_000, ..Tokens::default() },

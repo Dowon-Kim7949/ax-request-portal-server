@@ -348,6 +348,7 @@ async fn book(
         let call = Call {
             task: job.task.as_str(),
             selection: &ran,
+            runtime: s.runtime,
             request_id: Some(request.id),
             user_id: user,
             tokens: s.tokens,

@@ -62,6 +62,10 @@ pub struct Job {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spend {
     pub model: String,
+    /// How it ran (the contract's `AiRuntime`), booked as given:
+    /// [`settings::API_RUNTIME`] for a call this server made, the provider's
+    /// coding agent for a runner's run.
+    pub runtime: &'static str,
     pub tokens: Tokens,
     /// What the provider says the call cost, when it knows better than the
     /// price table (a coding agent's own estimate); booked as given.

@@ -174,8 +174,11 @@ pub async fn heartbeat(
 }
 
 /// The calls a run made: `[{ model, tokens: { input, cacheRead, cacheWrite,
-/// output }, costUsd? }]`, anything malformed left out.
-fn spend_of(body: &Value) -> Vec<Spend> {
+/// output }, costUsd? }]`, anything malformed left out. A runner runs the
+/// provider's coding agent for every task, a report included, so each is
+/// booked as that agent's run.
+fn spend_of(body: &Value, provider: &str) -> Vec<Spend> {
+    let runtime = settings::agent_runtime(provider);
     body["spend"]
         .as_array()
         .into_iter()
@@ -185,6 +188,7 @@ fn spend_of(body: &Value) -> Vec<Spend> {
             let count = |key: &str| s["tokens"][key].as_i64().filter(|n| *n >= 0).unwrap_or(0);
             Some(Spend {
                 model,
+                runtime,
                 tokens: Tokens {
                     input: count("input"),
                     cache_read: count("cacheRead"),
@@ -217,7 +221,7 @@ pub async fn result(
         .ok_or_else(|| ApiError::request_not_found(lang, job.request))?;
     drop(conn);
     let context = jobs::context(db, &job, &request).await.map_err(ApiError::db(lang))?;
-    let spend = spend_of(&body);
+    let spend = spend_of(&body, &context.selection.provider);
     let model = spend.first().map_or(context.selection.model.as_str(), |s| s.model.as_str()).to_owned();
     let outcome = match (job.task, body.get("report"), body.get("work"), body.get("failure")) {
         (_, _, _, Some(failure)) => Err(Failure {

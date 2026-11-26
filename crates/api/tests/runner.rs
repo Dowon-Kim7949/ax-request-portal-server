@@ -202,6 +202,8 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     assert!(log.contains("--disallowedTools Bash,Edit,Write") && log.contains("--bare"));
     let booked: f64 = sqlx::query_scalar("select cost_krw from ai_usage").fetch_one(&pool).await.unwrap();
     assert_eq!(booked, 700.0, "Claude Code's own cost, $0.50 at 1,400");
+    let runtime: String = sqlx::query_scalar("select runtime from ai_usage").fetch_one(&pool).await.unwrap();
+    assert_eq!(runtime, "claude_code", "a runner's report is a coding-agent run, not one API call");
 
     // The requester confirms; the developer starts the work.
     act(&pool, &requester, json!({ "event": "approveScope", "choices": [{ "questionId": "q1", "optionId": "q1o1" }] }))
@@ -245,6 +247,9 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "main..ax/request-1"]), "2");
     assert!(std::fs::read_to_string(root.join("claude.log")).unwrap().contains("Also trim spaces"));
     assert_eq!(runner.run_once().await, Ok(false), "nothing left");
+    let booked: Vec<(String, String)> =
+        sqlx::query_as("select distinct task, runtime from ai_usage order by task").fetch_all(&pool).await.unwrap();
+    assert_eq!(booked, [("report".into(), "claude_code".into()), ("work".into(), "claude_code".into())]);
 }
 
 #[sqlx::test(migrator = "ax_api::db::MIGRATOR")]

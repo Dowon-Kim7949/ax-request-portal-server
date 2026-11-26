@@ -2,11 +2,11 @@
 title: Requests
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -42,7 +42,6 @@ related:
   - docs/llm-wiki/DATA_MODEL.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-23
 ---
 
@@ -60,7 +59,7 @@ Filing a request, reading one, listing them, and the precheck that advises on a 
 - **Reading** (`getRequest`): visible to its requester, anyone with `request:read:all`, and its responsible developers (assignee or project owners, `StoredRequest::responsible`). The rule is `store::may_open`, which the release schedule's `canOpen` uses too. Anyone else gets the same `404` as for a missing request, so ids are not probed; a malformed id (not a positive number) is a `404` naming `id`. `present` adds signed links to attachments and adds `aiUsage` only for callers with `report:read`.
 - **Listing** (`listRequests`): `scope=mine` (own requests, no permission), `assigned` (needs `request:review`; assignee or project owner, admins see all), `all` (needs `request:read:all`). Filters: `status` (comma list; an unknown value matches nothing), `projectId`, `q` (title substring or number; a leading `#` is stripped, a lone `#` is no filter). Sorted by `updated_at desc`. A bad `scope` is a `400` naming `scope`.
 - **Precheck** (`precheckRequest`, `request:create`) never files or blocks. Rules come first, ported from the frontend's `precheck.ts`: missing targets, thin current behaviour (a bug needs two non-empty lines), vague desired behaviour or criteria (`VAGUE_KO`/`VAGUE_EN`), criteria not in "when … then …" form, duplicate checklist refs, empty expectations, a past desired date (by `AX_TIME_ZONE`), a date without a reason.
-- **`aiAdvice`** says whether a model added to the rules: `notConnected` when no model was asked (provider stub, so `state.claude` is absent; or the project's precheck selection is not `anthropic`), `included` when Claude answered (it may add nothing; its issues are appended only for fields the rules did not flag), `failed` when the call failed or exceeded `PRECHECK_TIMEOUT` (20 s) — then only the rules answer. The call is booked to the caller with no request id ([AI Settings and Budget](10_ai_settings_budget.md)).
+- **`aiAdvice`** says whether a model added to the rules: `notConnected` when no model was asked (provider stub, so `state.claude` is absent; or the project's precheck selection is not `anthropic`), `included` when Claude answered (it may add nothing; its issues are appended only for fields the rules did not flag), `failed` when the call failed or exceeded `PRECHECK_TIMEOUT` (20 s) — then only the rules answer. The call is booked to the caller with no request id, as runtime `api` ([AI Settings and Budget](10_ai_settings_budget.md)).
 
 ## API Services
 

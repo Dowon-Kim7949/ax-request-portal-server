@@ -2,11 +2,11 @@
 title: AI Settings and Budget
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -24,6 +24,7 @@ evidence:
   - crates/api/src/ai/settings.rs#symbol:budget_input
   - crates/api/src/ai/settings.rs#symbol:LIMIT_MAX_KRW
   - crates/api/src/ai/settings.rs#symbol:runtime_for
+  - crates/api/src/ai/settings.rs#symbol:agent_runtime
   - crates/api/src/ai/usage.rs#symbol:book
   - crates/api/src/ai/usage.rs#symbol:round_money
   - crates/api/src/ai/usage.rs#symbol:in_month
@@ -40,7 +41,6 @@ related:
   - docs/llm-wiki/domains/08_dashboard_releases.md
 visibility: public
 contains_sensitive_info: false
-reviewed_by: Kim Dowon
 reviewed_at: 2026-11-23
 ---
 
@@ -53,7 +53,7 @@ What operators manage: the budget, the model per AI task (with per-project overr
 ## Settings
 
 - Stored in `ai_config` as three JSON rows (`budget`, `selections`, `pricing`); a missing row means the template default. Every write first takes `pg_advisory_xact_lock(hashtext('ai_config'))` (`lock`), so cross-checks (removing a price vs selecting that model) cannot race.
-- **Selections**: default `precheck` → `claude-haiku-5-5`, `report` and `work` → `claude-opus-5-5`; `resolve(project, task)` takes a project override first. `runtime_for`: work on anthropic → `claude_code`, work on another provider → `codex`, everything else → `api`.
+- **Selections**: default `precheck` → `claude-haiku-5-5`, `report` and `work` → `claude-opus-5-5`; `resolve(project, task)` takes a project override first. `runtime_for` (the frontend's `runtimeFor`): work → the provider's coding agent (`agent_runtime`: anthropic → `claude_code`, another provider → `codex`), everything else → `api`. It names the work agent a run snapshots ([Lifecycle](05_lifecycle.md)); the ledger does not use it.
 - `updateAiSettings` checks under the lock: each override's project exists (`projectNotFound`), no duplicate `(project, task)`; then every selection in use, defaults first, needs a connected provider (`providerNotConnected`) and a price (`modelNotPriced`).
 - **"Connected"** (`connected`): only `anthropic`, only with a key configured, and only when something can use it — the server runs `AX_AI_PROVIDER=anthropic` or a runner token is set. With the stub, a configured key still shows "not connected". `openai` is never connected. The settings answer shows `connected` and a `keyHint` (last four characters of each distinct key) — never the key.
 - **Keys come only from configuration** (`AX_ANTHROPIC_API_KEY`, `…_PRECHECK`, `…_REPORT`, `…_WORK` in `deploy/.env`): `setProviderKey` / `removeProviderKey` validate their input and permission, then always answer `403 forbidden` (built by `ApiError::provider_keys_from_config`), the same way operator accounts never come from the API.
@@ -62,7 +62,7 @@ What operators manage: the budget, the model per AI task (with per-project overr
 
 ## The ledger (`ai_usage`)
 
-- `book` writes one row per call with tokens, `cost_usd` and `cost_krw` priced **at booking time** — later price changes never rewrite history. A model missing from the price table is logged and **not booked**. `team_id` is copied from the caller's user row at call time (a subquery in the insert), so moving a person between teams does not move past spending. Rows are never deleted.
+- `book` writes one row per call with tokens, `cost_usd` and `cost_krw` priced **at booking time** — later price changes never rewrite history. Its `runtime` is how the call actually ran (`Call::runtime`, from `Spend::runtime`), not the task's default: a call this server makes is `api`; a runner's run is the provider's coding agent for every task, so a report a runner writes is `claude_code`. A model missing from the price table is logged and **not booked**. `team_id` is copied from the caller's user row at call time (a subquery in the insert), so moving a person between teams does not move past spending. Rows are never deleted.
 - Precheck rows have no request id and are booked to the caller; job rows are booked to `started_by` ([AI Jobs](09_ai_jobs.md)).
 - Money: `round_money` rounds to 0.01; whole values serialise as JSON integers. Monthly totals and per-model sums are whole won; a request's `spentKrw` keeps two decimals. Months are business months in `AX_TIME_ZONE` (`in_month`).
 - **Per-request limit blocks; the monthly limit only shows.** `runWork`, `requestRevision` and `reviseScope` are refused with `409 guard_failed` once the request's lifetime spending (`for_request`) has reached the per-request limit; `provideInfo` is never blocked. The monthly limit and threshold are displayed in the budget and dashboard. Request details show `aiUsage { spentKrw, limitKrw, entries }` to callers with `report:read` (`request_usage`).
@@ -82,7 +82,7 @@ Only operators hold these permissions ([Users, Teams and Roles](02_users_teams_r
 
 ## Evidence
 
-- `crates/api/src/ai/settings.rs#symbol:lock`, `crates/api/src/ai/settings.rs#symbol:resolve`, `crates/api/src/ai/settings.rs#symbol:runtime_for`, `crates/api/src/ai/handlers.rs#symbol:update_settings` — selections.
+- `crates/api/src/ai/settings.rs#symbol:lock`, `crates/api/src/ai/settings.rs#symbol:resolve`, `crates/api/src/ai/settings.rs#symbol:runtime_for`, `crates/api/src/ai/settings.rs#symbol:agent_runtime`, `crates/api/src/ai/handlers.rs#symbol:update_settings` — selections and runtimes.
 - `crates/api/src/ai/settings.rs#symbol:connected`, `crates/api/src/ai/settings.rs#symbol:connections`, `crates/api/src/ai/handlers.rs#symbol:set_provider_key` — connection display and keys from configuration.
 - `crates/api/src/ai/settings.rs#symbol:budget_input`, `crates/api/src/ai/settings.rs#symbol:LIMIT_MAX_KRW`, `crates/api/src/ai/handlers.rs#symbol:update_pricing` — budget and pricing rules.
 - `crates/api/src/ai/usage.rs#symbol:book`, `crates/api/src/ai/usage.rs#symbol:round_money`, `crates/api/src/ai/usage.rs#symbol:in_month`, `crates/api/src/ai/usage.rs#symbol:for_request`, `crates/api/src/ai/usage.rs#symbol:request_usage`, `crates/api/src/ai/usage.rs#symbol:report_json` — the ledger.

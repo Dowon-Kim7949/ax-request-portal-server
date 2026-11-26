@@ -23,13 +23,26 @@ pub const TASKS: [&str; 3] = ["precheck", "report", "work"];
 /// The contract's `LimitKrw` maximum: ten billion won.
 pub const LIMIT_MAX_KRW: i64 = 10_000_000_000;
 
-/// How a task runs on a provider (the frontend's `runtimeFor`): precheck and
-/// report are one model call, work is the provider's coding agent.
+/// The contract's `AiRuntime` for one model API call.
+pub const API_RUNTIME: &str = "api";
+
+/// The provider's coding agent (the contract's `AiRuntime`): what a runner
+/// runs, whatever the task.
+pub fn agent_runtime(provider: &str) -> &'static str {
+    match provider {
+        "anthropic" => "claude_code",
+        _ => "codex",
+    }
+}
+
+/// How a task runs on a provider in the frontend's model (its `runtimeFor`):
+/// precheck and report are one model call, work is the provider's coding
+/// agent. The usage ledger books how a call actually ran instead
+/// (`Spend::runtime`): with a runner, a report is a coding-agent run too.
 pub fn runtime_for(task: &str, provider: &str) -> &'static str {
-    match (task, provider) {
-        ("work", "anthropic") => "claude_code",
-        ("work", _) => "codex",
-        _ => "api",
+    match task {
+        "work" => agent_runtime(provider),
+        _ => API_RUNTIME,
     }
 }
 
@@ -534,6 +547,8 @@ mod tests {
         assert_eq!(runtime_for("work", "anthropic"), "claude_code");
         assert_eq!(runtime_for("work", "openai"), "codex");
         assert_eq!(runtime_for("report", "anthropic"), "api");
+        assert_eq!(agent_runtime("anthropic"), "claude_code");
+        assert_eq!(agent_runtime("openai"), "codex");
     }
 
     #[test]
