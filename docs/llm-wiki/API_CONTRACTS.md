@@ -2,8 +2,8 @@
 title: API Contracts
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: api_contracts
 project: ax-request-portal-server
 last_updated: 2026-11-23

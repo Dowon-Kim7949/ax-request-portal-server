@@ -2,11 +2,11 @@
 title: Domain Features
 tags:
   - llm-wiki
-  - verified
-status: verified
+  - needs-review
+status: needs_review
 doc_type: domain_overview
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-27
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -26,7 +26,7 @@ reviewed_at: 2026-11-23
 
 # Domain Features
 
-What the server does, by who uses it. Details and evidence are in the domain documents; the operation names are the contract's `operationId`s (all 46 are implemented, `implemented::IMPLEMENTED`).
+What the server does, by who uses it. Details and evidence are in the domain documents; the operation names are the contract's `operationId`s (all 47 are implemented, `implemented::IMPLEMENTED`).
 
 ## Everyone signed in
 

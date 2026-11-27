@@ -5,7 +5,9 @@ use sqlx::PgPool;
 use crate::ai::claude::ClaudeProvider;
 use crate::attachments::Files;
 
-use crate::config::{AiSettings, BusinessTimeZone, DraftPolicy, LoginPolicy, SessionPolicy, SetupLinkPolicy};
+use crate::config::{
+    AiSettings, BusinessTimeZone, DraftPolicy, GitHubRead, LoginPolicy, SessionPolicy, SetupLinkPolicy,
+};
 use crate::error::ApiError;
 use crate::lang::Lang;
 
@@ -24,6 +26,10 @@ pub struct AppState {
     /// The Claude provider when `AX_AI_PROVIDER=anthropic`: the precheck
     /// asks it directly; the report worker holds its own.
     pub claude: Option<ClaudeProvider>,
+    /// Reading repository branches for the project form.
+    pub github: GitHubRead,
+    /// The client those reads go through.
+    pub http: reqwest::Client,
 }
 
 impl AppState {

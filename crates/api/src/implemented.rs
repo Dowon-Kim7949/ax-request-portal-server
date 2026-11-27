@@ -22,6 +22,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "listProjects",
     "createProject",
     "updateProject",
+    "listRepositoryBranches",
     "listRequests",
     "createRequest",
     "getRequest",

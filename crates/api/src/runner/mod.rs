@@ -1,7 +1,8 @@
 //! The runner (`ax-api runner`): takes the AI's jobs from a server and runs
 //! them with Claude Code on a fresh clone of the project's GitHub repository.
 //!
-//! - A **report** clones the default branch and lets the agent read the code
+//! - A **report** clones the project's branch (the repository's default
+//!   branch when the project names none) and lets the agent read the code
 //!   and the wiki. The runner keeps only the wiki pages and files that exist,
 //!   leaves out the wiki's own navigation pages (index, README, profiles,
 //!   log, templates, guides: they say nothing about the change), and reads
@@ -11,10 +12,10 @@
 //!   by later runs), checks with a dry-run push that the token may push there
 //!   before the agent spends anything, lets the agent edit and test, commits
 //!   what it changed, pushes the branch and opens (or reuses) the pull
-//!   request. The agent holds no git credentials; the runner pushes. Nothing
-//!   merges: a person does, and the token should not even allow it. A wiki
-//!   page the agent edited is never left marked `verified`: it goes back to
-//!   `needs_review`.
+//!   request into the project's branch. The agent holds no git credentials;
+//!   the runner pushes. Nothing merges: a person does, and the token should
+//!   not even allow it. A wiki page the agent edited is never left marked
+//!   `verified`: it goes back to `needs_review`.
 //! - A work run that changed no file commits nothing. When a pull request from
 //!   an earlier run is open, the run checked it: it keeps that pull request's
 //!   link and succeeds if the tests ran and pass (`tests_failed` if they
@@ -220,7 +221,9 @@ impl Runner {
         }
     }
 
-    /// The project's repository, cloned into `dir/repo` at the default branch.
+    /// The project's repository, cloned into `dir/repo` at the project's
+    /// branch (`repository.branch`), or the default branch when it names
+    /// none; that branch is the base a work run's pull request goes into.
     async fn clone(&self, job: &Claimed, dir: &Path) -> Result<(Repo, PathBuf, String), RunError> {
         let repository = &job.project["repository"];
         if repository["provider"] != "github" {
@@ -230,7 +233,13 @@ impl Runner {
         let repo = Repo::parse(url).ok_or_else(|| RunError::fail(format!("not a GitHub repository URL: {url}")))?;
         tokio::fs::create_dir_all(dir).await.map_err(|e| RunError::retry(format!("no work directory: {e}")))?;
         let git = self.git(&repo);
-        git.run(dir, &["clone", "--depth", "50", "--no-tags", &repo.url, "repo"]).await?;
+        let mut args = vec!["clone", "--depth", "50", "--no-tags"];
+        if let Some(branch) = repository["branch"].as_str() {
+            // The server checked the name (`BranchName`): it cannot pass for an option.
+            args.extend(["--branch", branch]);
+        }
+        args.extend([repo.url.as_str(), "repo"]);
+        git.run(dir, &args).await?;
         let clone = dir.join("repo");
         let base = git.run(&clone, &["rev-parse", "--abbrev-ref", "HEAD"]).await?;
         Ok((repo, clone, base))

@@ -19,6 +19,8 @@
 //! | `AX_DRAFTS_PER_ACCOUNT` | `20`     | How many saved drafts one person may keep                  |
 //! | `AX_UPLOAD_DIR`   | `uploads`      | Where uploaded attachments are kept (created if missing)   |
 //! | `AX_PUBLIC_PATH`  | `/api`         | Where the browser reaches this server, for attachment links |
+//! | `AX_GITHUB_READ_TOKEN` | unset     | Reads a GitHub repository's branches for the project form (Contents: read) |
+//! | `AX_GITHUB_API`   | `https://api.github.com` | GitHub's REST API (GitHub Enterprise: `https://HOST/api/v3`) |
 //!
 //! The frontend's nginx config proxies `/api/` to this server with a trailing
 //! slash, which strips the prefix, so the default mounts the contract at `/`.
@@ -52,6 +54,29 @@ pub struct Config {
     /// routes (`/api` behind the frontend's nginx), without a trailing slash
     /// (`/` stays `/`). Attachment links start with it.
     pub public_path: String,
+    pub github: GitHubRead,
+}
+
+/// The default `AX_GITHUB_API`.
+pub const GITHUB_API: &str = "https://api.github.com";
+
+/// What the server itself reads from GitHub: a repository's branches, for
+/// the project form (`listRepositoryBranches`). The runner, which pushes,
+/// holds its own token; this one only needs to read, so the web server
+/// never holds a token that can change code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitHubRead {
+    /// `AX_GITHUB_READ_TOKEN`; without it the server lists no branches and
+    /// the form takes a typed name.
+    pub token: Option<Secret>,
+    /// `AX_GITHUB_API`, without a trailing slash.
+    pub api: String,
+}
+
+impl Default for GitHubRead {
+    fn default() -> Self {
+        Self { token: None, api: GITHUB_API.to_owned() }
+    }
 }
 
 /// How the AI's jobs run.
@@ -307,7 +332,7 @@ impl RunnerConfig {
             token: Secret(required("AX_RUNNER_TOKEN")?),
             github_token: Secret(required("AX_GITHUB_TOKEN")?),
             github_api: non_empty("AX_GITHUB_API")
-                .unwrap_or_else(|| "https://api.github.com".to_owned())
+                .unwrap_or_else(|| GITHUB_API.to_owned())
                 .trim_end_matches('/')
                 .to_owned(),
             anthropic,
@@ -429,6 +454,11 @@ impl Config {
         }
         let public_path = if public_path == "/" { public_path } else { public_path.trim_end_matches('/').to_owned() };
 
+        let github = GitHubRead {
+            token: secret("AX_GITHUB_READ_TOKEN"),
+            api: non_empty("AX_GITHUB_API").unwrap_or_else(|| GITHUB_API.to_owned()).trim_end_matches('/').to_owned(),
+        };
+
         Ok(Self {
             bind,
             base_path,
@@ -441,6 +471,7 @@ impl Config {
             drafts,
             upload_dir,
             public_path,
+            github,
         })
     }
 }
@@ -477,6 +508,16 @@ mod tests {
         assert_eq!(config(&[("AX_TIME_ZONE", "Europe/Berlin")]).unwrap().time_zone.0, "Europe/Berlin");
         assert_eq!(config(&[("AX_SETUP_LINK_TTL", "2d")]).unwrap().setup_links.ttl, Duration::from_secs(48 * 3600));
         assert!(config(&[("AX_SETUP_LINK_TTL", "soon")]).is_err());
+    }
+
+    #[test]
+    fn github_reading() {
+        assert_eq!(config(&[]).unwrap().github, GitHubRead::default());
+        let c = config(&[("AX_GITHUB_READ_TOKEN", " ghp_r "), ("AX_GITHUB_API", "https://ghe.example.com/api/v3/")])
+            .unwrap();
+        assert_eq!(c.github.token.as_ref().map(Secret::expose), Some("ghp_r"));
+        assert_eq!(c.github.api, "https://ghe.example.com/api/v3");
+        assert_eq!(config(&[("AX_GITHUB_READ_TOKEN", " ")]).unwrap().github.token, None);
     }
 
     #[test]

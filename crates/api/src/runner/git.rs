@@ -73,11 +73,12 @@ impl Git<'_> {
     }
 }
 
-/// Whether git failed because the token may not do this, which trying again
-/// does not change: a failed sign-in, a token without the right to push, or a
-/// repository it cannot see (GitHub answers a private one with 404).
+/// Whether git failed in a way trying again does not change: a failed
+/// sign-in, a token without the right to push, a repository it cannot see
+/// (GitHub answers a private one with 404), or a project branch the
+/// repository does not have.
 fn refused(stderr: &str) -> bool {
-    const SIGNS: [&str; 7] = [
+    const SIGNS: [&str; 8] = [
         "The requested URL returned error: 401",
         "The requested URL returned error: 403",
         "The requested URL returned error: 404",
@@ -85,6 +86,7 @@ fn refused(stderr: &str) -> bool {
         "Write access to repository not granted",
         "Repository not found",
         "denied to",
+        "not found in upstream origin",
     ];
     SIGNS.iter().any(|sign| stderr.contains(sign))
 }
@@ -110,6 +112,8 @@ mod tests {
             "fatal: Authentication failed for 'https://github.com/acme/portal/'",
             "remote: Repository not found.\nfatal: repository 'https://github.com/acme/portal/' not found",
             "remote: Permission to acme/portal.git denied to someone.",
+            "warning: Could not find remote branch dev to clone.
+fatal: Remote branch dev not found in upstream origin",
         ] {
             assert!(refused(refusal), "{refusal}");
         }

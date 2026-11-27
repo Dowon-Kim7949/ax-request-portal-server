@@ -95,6 +95,17 @@ fn remote(root: &Path) -> PathBuf {
     git(&seed, &["add", "-A"]);
     git(&seed, &["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "seed"]);
     git(&seed, &["push", "-q", bare.to_str().unwrap(), "main"]);
+    // A branch a project can name instead of the default one.
+    git(&seed, &["checkout", "-q", "-b", "dev"]);
+    std::fs::write(
+        seed.join("src/dev.txt"),
+        "only on dev
+",
+    )
+    .unwrap();
+    git(&seed, &["add", "-A"]);
+    git(&seed, &["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "dev"]);
+    git(&seed, &["push", "-q", bare.to_str().unwrap(), "dev"]);
     bare
 }
 
@@ -111,7 +122,7 @@ fn fake_claude(root: &Path) -> PathBuf {
                 { "path": "docs/llm-wiki/notices.md", "title": "x" },
                 { "path": "docs/llm-wiki/missing.md", "title": "Gone" },
             ],
-            "codeFiles": ["src/notices.txt", "src/gone.txt", "../etc/passwd"],
+            "codeFiles": ["src/notices.txt", "src/dev.txt", "src/gone.txt", "../etc/passwd"],
             "plan": ["Add a filter to the list"],
             "verification": [{ "criterionId": "c1", "automatable": true, "method": "A component test types a word" }],
             "openQuestions": [], "assumptions": ["The list is filtered on the server"], "constraintChecks": [],
@@ -186,15 +197,23 @@ async fn act(pool: &PgPool, token: &str, body: Value) {
 /// A GitHub project and a change request filed against it; the developer's
 /// and the requester's sessions.
 async fn filed(pool: &PgPool) -> (String, String) {
+    filed_on(pool, None).await
+}
+
+/// [`filed`], the project naming `branch` (the default branch when `None`).
+async fn filed_on(pool: &PgPool, branch: Option<&str>) -> (String, String) {
     let (_, admin) = signed_in(pool, "admin@example.com", Role::Admin).await;
     let (dev_user, dev) = signed_in(pool, "dev@example.com", Role::Developer).await;
     let (_, requester) = signed_in(pool, "req@example.com", Role::Requester).await;
-    let project = json!({
+    let mut project = json!({
         "name": "Portal", "description": "Notice board", "icon": "globe",
         "repository": { "provider": "github", "url": "https://github.com/acme/portal" },
         "wikiPath": "docs/llm-wiki", "ownerIds": [dev_user.id.to_string()],
         "targets": [{ "name": "Notices" }, { "name": "Search" }], "constraints": [], "active": true,
     });
+    if let Some(branch) = branch {
+        project["repository"]["branch"] = json!(branch);
+    }
     let (_, project) = send(pool, "POST", "/projects", Some(&admin), "en", Some(project)).await;
     let filed = json!({
         "projectId": project["id"], "type": "change", "title": "Search notices", "targetIds": [project["targets"][0]["id"]],
@@ -300,6 +319,35 @@ async fn a_runner_reports_with_evidence_then_opens_a_pull_request(pool: PgPool) 
     let booked: Vec<(String, String)> =
         sqlx::query_as("select distinct task, runtime from ai_usage order by task").fetch_all(&pool).await.unwrap();
     assert_eq!(booked, [("report".into(), "claude_code".into()), ("work".into(), "claude_code".into())]);
+}
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_project_branch_is_read_worked_from_and_receives_the_pull_request(pool: PgPool) {
+    let root = tempdir();
+    let (dev, requester) = filed_on(&pool, Some("dev")).await;
+    let server = api(&pool, Some(TOKEN)).await;
+    let (github, created) = github().await;
+    let bare = remote(&root);
+    let claude = fake_claude(&root);
+    let runner = runner(&server, &github, &root, &bare, &claude, None);
+
+    assert_eq!(runner.run_once().await, Ok(true));
+    let shown = request(&pool, &dev).await;
+    assert_eq!(shown["status"], "scope_check", "{shown}");
+    let read = shown["report"]["evidence"]["codeFiles"].as_array().unwrap();
+    assert!(read.contains(&json!("src/dev.txt")), "the report reads the project's branch: {read:?}");
+
+    act(&pool, &requester, json!({ "event": "approveScope", "choices": [{ "questionId": "q1", "optionId": "q1o1" }] }))
+        .await;
+    act(&pool, &dev, json!({ "event": "runWork", "checkedAssumptions": ["a1"] })).await;
+    assert_eq!(runner.run_once().await, Ok(true));
+    assert_eq!(request(&pool, &dev).await["status"], "code_review");
+    let pr = created.lock().unwrap()[0].clone();
+    assert_eq!((&pr["head"], &pr["base"]), (&json!("ax/request-1"), &json!("dev")), "into the project's branch");
+    let bare_dir = bare.parent().unwrap();
+    let gd = format!("--git-dir={}", bare.display());
+    assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "dev..ax/request-1"]), "1", "grown from dev");
+    assert_eq!(git(bare_dir, &[&gd, "rev-list", "--count", "dev"]), "2", "nothing reaches dev");
 }
 
 #[sqlx::test(migrator = "ax_api::db::MIGRATOR")]

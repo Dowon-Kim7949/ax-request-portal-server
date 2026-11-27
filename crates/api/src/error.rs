@@ -213,6 +213,18 @@ impl ApiError {
         }
     }
 
+    /// `404` from `listRepositoryBranches`: no such repository, or the server
+    /// cannot read it (the mock's `repositoryNotFound`).
+    pub fn repository_not_found(lang: Lang) -> Self {
+        Self::new(
+            ErrorCode::NotFound,
+            lang.pick(
+                "저장소를 찾을 수 없거나 서버가 이 저장소에 접근할 수 없습니다.",
+                "The repository was not found, or the server cannot reach it.",
+            ),
+        )
+    }
+
     /// `404`: no such request, or one the person may not open (the mock's
     /// `requestNotFound`; existence is not given away).
     pub fn request_not_found(lang: Lang, id: impl std::fmt::Display) -> Self {

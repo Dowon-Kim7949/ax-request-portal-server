@@ -97,6 +97,7 @@ fn implemented(id: &str) -> Option<AddHandler> {
         "listProjects" => |methods, filter| methods.on(filter, projects::handlers::list),
         "createProject" => |methods, filter| methods.on(filter, projects::handlers::create),
         "updateProject" => |methods, filter| methods.on(filter, projects::handlers::update),
+        "listRepositoryBranches" => |methods, filter| methods.on(filter, projects::branches::list),
         "listRequests" => |methods, filter| methods.on(filter, requests::handlers::list),
         "createRequest" => |methods, filter| methods.on(filter, requests::handlers::create),
         "getRequest" => |methods, filter| methods.on(filter, requests::handlers::get),

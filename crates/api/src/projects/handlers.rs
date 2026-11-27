@@ -18,7 +18,7 @@ use crate::roles::Permission;
 use crate::state::AppState;
 
 const ICONS: [&str; 5] = ["globe", "smartphone", "layout-dashboard", "server", "box"];
-const PROVIDERS: [&str; 2] = ["gitlab", "github"];
+pub(super) const PROVIDERS: [&str; 2] = ["gitlab", "github"];
 /// The frontend's `PROJECT_CONSTRAINTS_MAX`.
 pub const CONSTRAINTS_MAX: usize = 20;
 
@@ -26,8 +26,11 @@ const NAME: Text = ("프로젝트 이름은 1–60자로 입력해 주세요.", 
 const DESCRIPTION: Text = ("설명은 300자 이하로 입력해 주세요.", "Use 300 characters or fewer for the description.");
 const ICON: Text = ("아이콘을 확인해 주세요.", "Choose one of the icons.");
 const REPOSITORY: Text = ("저장소를 확인해 주세요.", "Check the repository.");
-const PROVIDER: Text = ("저장소 종류를 확인해 주세요.", "Choose GitLab or GitHub.");
-const URL: Text = ("http(s)로 시작하는 전체 주소를 입력해 주세요.", "Must be an absolute http(s) URL");
+pub(super) const PROVIDER: Text = ("저장소 종류를 확인해 주세요.", "Choose GitLab or GitHub.");
+pub(super) const URL: Text = ("http(s)로 시작하는 전체 주소를 입력해 주세요.", "Must be an absolute http(s) URL");
+const BRANCH: Text = ("브랜치 이름으로 쓸 수 없는 값입니다.", "This is not a valid branch name.");
+/// The frontend's `BRANCH_NAME_MAX`.
+pub const BRANCH_NAME_MAX: usize = 200;
 const WIKI_PATH: Text = ("위키 경로를 입력해 주세요.", "Enter the wiki path.");
 const OWNERS: Text = ("담당자를 한 명 이상 골라 주세요.", "Choose at least one owner.");
 const TARGETS: Text = ("대상 목록을 확인해 주세요.", "Check the targets.");
@@ -60,8 +63,9 @@ pub async fn create(
 
     let mut tx = db.begin().await.map_err(ApiError::db(lang))?;
     let id: Uuid = sqlx::query_scalar(
-        "insert into projects (name, description, icon, repository_provider, repository_url, wiki_path, targets, rules, active)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "insert into projects (name, description, icon, repository_provider, repository_url, repository_branch,
+                               wiki_path, targets, rules, active)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          returning id",
     )
     .bind(&input.name)
@@ -69,6 +73,7 @@ pub async fn create(
     .bind(&input.icon)
     .bind(&input.provider)
     .bind(&input.url)
+    .bind(&input.branch)
     .bind(&input.wiki_path)
     .bind(&input.targets)
     .bind(&input.constraints)
@@ -83,7 +88,8 @@ pub async fn create(
 }
 
 /// `PUT /projects/{id}` (`project:manage`): replaces the project. Targets and
-/// rules sent with an id keep it; new ones get one. The wiki numbers stay.
+/// rules sent with an id keep it; new ones get one. The wiki numbers stay. A
+/// repository sent without a branch goes back to the default branch.
 /// `400` (`ownersMustBeDevelopers`) is checked before `404` (`projectNotFound`),
 /// as in the mock API.
 pub async fn update(
@@ -104,7 +110,7 @@ pub async fn update(
     let updated = sqlx::query(
         "update projects
             set name = $2, description = $3, icon = $4, repository_provider = $5, repository_url = $6,
-                wiki_path = $7, targets = $8, rules = $9, active = $10, updated_at = now()
+                repository_branch = $7, wiki_path = $8, targets = $9, rules = $10, active = $11, updated_at = now()
           where id = $1",
     )
     .bind(id)
@@ -113,6 +119,7 @@ pub async fn update(
     .bind(&input.icon)
     .bind(&input.provider)
     .bind(&input.url)
+    .bind(&input.branch)
     .bind(&input.wiki_path)
     .bind(&input.targets)
     .bind(&input.constraints)
@@ -172,6 +179,8 @@ struct ProjectInput {
     icon: String,
     provider: String,
     url: String,
+    /// `None`: the repository's default branch
+    branch: Option<String>,
     wiki_path: String,
     owner_ids: Vec<String>,
     /// `[{ id, name, wikiDoc? }]`, ids filled in
@@ -188,7 +197,7 @@ impl ProjectInput {
         let description = body
             .required("description", DESCRIPTION, |v| v.as_str().filter(|d| utf16_len(d) <= 300).map(str::to_owned));
         let icon = body.required("icon", ICON, |v| v.as_str().filter(|i| ICONS.contains(i)).map(str::to_owned));
-        let (provider, url) = repository(&mut body);
+        let (provider, url, branch) = repository(&mut body);
         let wiki_path = body.required("wikiPath", WIKI_PATH, |v| trimmed(v, None));
         let owner_ids = body.required("ownerIds", OWNERS, |v| {
             let ids: Option<Vec<String>> = v.as_array()?.iter().map(|id| id.as_str().map(str::to_owned)).collect();
@@ -198,31 +207,43 @@ impl ProjectInput {
         let constraints = constraints(&mut body);
         let active = body.required("active", ACTIVE, Value::as_bool);
         body.finish()?;
-        match (name, description, icon, provider, url, wiki_path, owner_ids, targets, constraints, active) {
+        match (name, description, icon, provider, url, branch, wiki_path, owner_ids, targets, constraints, active) {
             (
                 Some(name),
                 Some(description),
                 Some(icon),
                 Some(provider),
                 Some(url),
+                Some(branch),
                 Some(wiki_path),
                 Some(owner_ids),
                 Some(targets),
                 Some(constraints),
                 Some(active),
-            ) => {
-                Ok(Self { name, description, icon, provider, url, wiki_path, owner_ids, targets, constraints, active })
-            }
+            ) => Ok(Self {
+                name,
+                description,
+                icon,
+                provider,
+                url,
+                branch,
+                wiki_path,
+                owner_ids,
+                targets,
+                constraints,
+                active,
+            }),
             _ => unreachable!("finish() fails when a required field is missing"),
         }
     }
 }
 
-/// `repository: { provider, url }`, with nested issue paths like zod's.
-fn repository(body: &mut Body) -> (Option<String>, Option<String>) {
+/// `repository: { provider, url, branch? }`, with nested issue paths like
+/// zod's. The branch is `Some(None)` when it is left out.
+fn repository(body: &mut Body) -> (Option<String>, Option<String>, Option<Option<String>>) {
     let Some(repo) = body.field("repository").and_then(Value::as_object).cloned() else {
         body.issue("repository", REPOSITORY);
-        return (None, None);
+        return (None, None, None);
     };
     let provider = repo.get("provider").and_then(Value::as_str).filter(|p| PROVIDERS.contains(p)).map(str::to_owned);
     if provider.is_none() {
@@ -232,7 +253,33 @@ fn repository(body: &mut Body) -> (Option<String>, Option<String>) {
     if url.is_none() {
         body.issue("repository.url", URL);
     }
-    (provider, url)
+    let branch = match repo.get("branch") {
+        None => Some(None),
+        Some(v) => v.as_str().and_then(branch_name).map(Some),
+    };
+    if branch.is_none() {
+        body.issue("repository.branch", BRANCH);
+    }
+    (provider, url, branch)
+}
+
+/// The frontend's `BranchName`, trimmed: a name git accepts as a branch
+/// (`git check-ref-format --branch`) that can also travel safely as a command
+/// argument. 1 to 200 characters; no whitespace or control characters, none
+/// of `~ ^ : ? * [ \`, no `..`, `//` or `@{`, no part that starts with `.` or
+/// ends with `.lock`, no leading `-` or `/`, no trailing `/` or `.`, and not
+/// `@` alone. The contract writes it as a pattern with lookaheads, which the
+/// `regex` crate does not take, so the rules are spelled out here.
+pub fn branch_name(value: &str) -> Option<String> {
+    let name = value.trim();
+    let ok = (1..=BRANCH_NAME_MAX).contains(&utf16_len(name))
+        && !name.starts_with(['-', '/', '.'])
+        && !name.ends_with(['/', '.'])
+        && name != "@"
+        && !["..", "//", "/.", "@{"].iter().any(|bad| name.contains(bad))
+        && !name.split('/').any(|part| part.ends_with(".lock"))
+        && !name.chars().any(|c| c <= ' ' || c == '\u{7f}' || "~^:?*[\\".contains(c));
+    ok.then(|| name.to_owned())
 }
 
 /// `targets: [{ id?, name, wikiDoc? }]`; a target without an id gets one.
@@ -353,6 +400,44 @@ mod tests {
         }
     }
 
+    /// The cases of the frontend's `src/domain/branch-name.test.ts`.
+    #[test]
+    fn branch_names_follow_git() {
+        for ok in ["main", "develop", "csap-docker", "release/2026.11", "feature/notice_search", "v1.2", "a"] {
+            assert_eq!(branch_name(ok).as_deref(), Some(ok), "{ok}");
+        }
+        assert_eq!(branch_name("  develop ").as_deref(), Some("develop"), "trimmed");
+        let long = "x".repeat(BRANCH_NAME_MAX + 1);
+        for bad in [
+            "",
+            " ",
+            "-delete",
+            "/main",
+            "main/",
+            ".hidden",
+            "feature/.hidden",
+            "main.",
+            "a..b",
+            "a//b",
+            "a@{1}",
+            "@",
+            "main.lock",
+            "main.lock/x",
+            "with space",
+            "tab\there",
+            "a~1",
+            "a^",
+            "a:b",
+            "a?",
+            "a*",
+            "a[b",
+            "a\\b",
+            &long,
+        ] {
+            assert_eq!(branch_name(bad), None, "{bad:?}");
+        }
+    }
+
     fn issues(body: &str) -> Vec<String> {
         ProjectInput::parse(body.as_bytes(), Lang::En).unwrap_err().body.issues.into_iter().map(|i| i.path).collect()
     }
@@ -377,7 +462,7 @@ mod tests {
 
         assert_eq!(
             issues(
-                r#"{"repository":{"provider":"svn","url":"x"},"ownerIds":[],"targets":[{"id":1}],"constraints":[{"text":""}]}"#
+                r#"{"repository":{"provider":"svn","url":"x","branch":"a..b"},"ownerIds":[],"targets":[{"id":1}],"constraints":[{"text":""}]}"#
             ),
             [
                 "name",
@@ -385,6 +470,7 @@ mod tests {
                 "icon",
                 "repository.provider",
                 "repository.url",
+                "repository.branch",
                 "wikiPath",
                 "ownerIds",
                 "targets.0",
