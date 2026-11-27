@@ -113,6 +113,8 @@ async fn serve(config: Config) -> Result<(), BoxError> {
         files,
         claude: (config.ai.provider == "anthropic")
             .then(|| ax_api::ai::claude::ClaudeProvider::new(config.ai.anthropic.clone())),
+        github: config.github.clone(),
+        http: reqwest::Client::new(),
     };
     let app = router(state, &config);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

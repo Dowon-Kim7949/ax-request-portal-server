@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: operations
 project: ax-request-portal-server
-last_updated: 2026-11-26
+last_updated: 2026-11-27
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -32,7 +32,7 @@ related:
 visibility: public
 contains_sensitive_info: false
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-26
+reviewed_at: 2026-11-27
 ---
 
 # Operations
@@ -57,6 +57,8 @@ Everything comes from environment variables (`deploy/.env`, from `deploy/.env.ex
 | `AX_DRAFTS_PER_ACCOUNT` | `20` | draft cap; keep equal to the frontend's setting |
 | `AX_UPLOAD_DIR` | `uploads` | attachment storage (the compose volume `uploads`) |
 | `AX_PUBLIC_PATH` | `/api` | path the browser uses to reach this server, for attachment links |
+| `AX_GITHUB_READ_TOKEN` | unset | reads a GitHub repository's branches for the project form; Contents read only, not the runner's token; unset, the form takes a typed branch name |
+| `AX_GITHUB_API` | `https://api.github.com` | GitHub's REST API, for the branch list here and for the runner |
 
 Runner settings (`AX_RUNNER_SERVER`, `AX_GITHUB_TOKEN`, `AX_GITHUB_API`, `AX_RUNNER_WORKDIR`, `AX_RUNNER_TIMEOUT`, `AX_CLAUDE_BIN`) are in [Runner](domains/11_runner.md). Values that must match the frontend's `appConfig` (time zone, scope check, draft cap) are not checked by code.
 

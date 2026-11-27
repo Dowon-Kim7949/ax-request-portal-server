@@ -24,6 +24,29 @@ contains_sensitive_info: false
 
 This is an append-only change log. Do not edit existing entries; add new changes at the top.
 
+## 2026-11-27 - A project's branch: stored, listed, cloned
+
+- status: needs_review
+- actor: claude-code
+- scope: code, docs
+- changed:
+  - contract/ (frontend 3273b55): `ProjectRepository.branch`, `listRepositoryBranches`; 47 operations
+  - crates/api/migrations/20261127000000_project_branch.sql (`projects.repository_branch`)
+  - crates/api/src/projects/mod.rs, projects/handlers.rs (`branch_name`, `repository.branch`), projects/branches.rs (`listRepositoryBranches`), error.rs (`repository_not_found`), implemented.rs, routes.rs
+  - crates/api/src/config.rs (`GitHubRead`: `AX_GITHUB_READ_TOKEN`, `AX_GITHUB_API`), state.rs, main.rs; deploy/compose.yaml, deploy/.env.example, README.md
+  - crates/api/src/runner/mod.rs (`clone --branch`), runner/git.rs (a missing branch is not retried)
+  - docs/llm-wiki: domains/03_projects, domains/11_runner, domains/12_platform, DATA_MODEL, DOMAIN_FEATURES, OPERATIONS, SECURITY
+  - docs/llm-wiki: API_CONTRACTS, ARCHITECTURE_CONVENTIONS (status only)
+- summary:
+  - A project may name the branch the AI works from; the report and the work run clone it, and the pull request goes into it. Without one, the repository's default branch, as before.
+  - `listRepositoryBranches` reads GitHub with a read-only token of the server's own; anything it cannot read is one `404 repositoryNotFound`, and the form takes a typed name.
+  - The status-only documents cite a changed source file; nothing they say changed, so they only go back to `needs_review` for a re-approval.
+- evidence:
+  - crates/api/tests/projects.rs (`a_project_names_the_branch_the_ai_works_from`), crates/api/tests/branches.rs, crates/api/tests/runner.rs (`a_project_branch_is_read_worked_from_and_receives_the_pull_request`), unit tests `branch_names_follow_git`, `github_reading`, `a_refused_token_is_not_tried_again`
+- caveats:
+  - Without `AX_GITHUB_READ_TOKEN` no branch list is read; a deployment adds the token to `deploy/.env`.
+  - GitLab repositories get no branch list (the runner handles GitHub only).
+
 ## 2026-11-26 - Deployed; backup and restore written down
 
 - status: needs_review

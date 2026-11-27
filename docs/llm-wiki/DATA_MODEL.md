@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: data_model
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-27
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -26,7 +26,7 @@ related:
 visibility: public
 contains_sensitive_info: false
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-23
+reviewed_at: 2026-11-27
 ---
 
 # Data Model
@@ -56,6 +56,7 @@ PostgreSQL 18, managed by sqlx migrations embedded in the binary and applied on 
 | `20261119000006_ai_settings_and_usage` | `ai_config`, `ai_usage` | three JSON settings rows; the never-deleted ledger with `team_id` copied at call time |
 | `20261119000007_login_attempts` | `login_attempts` | per lower-cased email |
 | `20261119000008_runner_claims` | (`ai_jobs` columns) | `claim`, `lease_until` for the runner |
+| `20261127000000_project_branch` | (`projects` column) | `repository_branch`: null = the default branch; trimmed, non-empty, ≤ 200 by check (the name rules are the server's) |
 
 Where each table is used: [Auth and Sessions](domains/01_auth_sessions.md), [Users, Teams and Roles](domains/02_users_teams_roles.md), [Projects](domains/03_projects.md), [Requests](domains/04_requests.md), [Notifications](domains/07_notifications.md), [AI Jobs](domains/09_ai_jobs.md), [Drafts and Attachments](domains/06_drafts_attachments.md), [AI Settings and Budget](domains/10_ai_settings_budget.md), [Runner](domains/11_runner.md).
 

@@ -1,10 +1,12 @@
 //! Projects, as the contract's `Project` shows them, and `listProjects`,
-//! `createProject`, `updateProject`.
+//! `createProject`, `updateProject`, `listRepositoryBranches`.
 //!
 //! Owners are kept in order in `project_owners` (a new request goes to the
 //! first one); change targets and the rules to keep are JSONB lists in the
-//! contract's shape, with ids the server gives and never changes.
+//! contract's shape, with ids the server gives and never changes. The
+//! repository may name the branch the AI works from (`repository_branch`).
 
+pub mod branches;
 pub mod handlers;
 
 use serde::Serialize;
@@ -36,6 +38,9 @@ pub struct Project {
 pub struct Repository {
     pub provider: String,
     pub url: String,
+    /// The branch the AI works from; `None` = the repository's default branch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -49,7 +54,8 @@ pub struct WikiStats {
 
 /// Columns of a project row, owners in order; `wiki_synced_at` is RFC 3339 in UTC.
 pub const SELECT: &str = r#"
-    select p.id, p.name, p.description, p.icon, p.repository_provider, p.repository_url, p.wiki_path,
+    select p.id, p.name, p.description, p.icon, p.repository_provider, p.repository_url,
+           p.repository_branch, p.wiki_path,
            p.wiki_verified_docs, p.wiki_total_docs,
            to_char(p.wiki_synced_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as wiki_synced_at,
            p.targets, p.rules, p.active,
@@ -72,6 +78,7 @@ impl Project {
             repository: Repository {
                 provider: row.try_get("repository_provider")?,
                 url: row.try_get("repository_url")?,
+                branch: row.try_get("repository_branch")?,
             },
             wiki_path: row.try_get("wiki_path")?,
             wiki_stats: WikiStats {

@@ -150,3 +150,33 @@ async fn the_body_is_the_contracts_project_input(pool: PgPool) {
     let count: i64 = sqlx::query_scalar("select count(*) from projects").fetch_one(&pool).await.unwrap();
     assert_eq!(count, 0);
 }
+
+#[sqlx::test(migrator = "ax_api::db::MIGRATOR")]
+async fn a_project_names_the_branch_the_ai_works_from(pool: PgPool) {
+    let (_, admin) = signed_in(&pool, "admin@example.com", Role::Admin).await;
+    let dev = account(&pool, "dev@example.com", Role::Developer).await;
+    let mut body = input(&[dev.id.to_string()]);
+    body["repository"]["branch"] = json!(" release/2026.11 ");
+    let (status, project) = create(&pool, &admin, body.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{project}");
+    assert_eq!(project["repository"]["branch"], "release/2026.11", "trimmed");
+    let id = project["id"].as_str().unwrap().to_owned();
+    let (_, list) = send(&pool, "GET", "/projects", Some(&admin), "en", None).await;
+    assert_eq!(list[0]["repository"]["branch"], "release/2026.11");
+
+    // Replacing the project without a branch goes back to the default one.
+    body["repository"] = json!({ "provider": "gitlab", "url": "https://git.example.com/web/portal" });
+    let (status, project) = update(&pool, &admin, &id, body.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(project["repository"].get("branch").is_none(), "{project}");
+
+    for bad in [json!(""), json!("a..b"), json!("-x"), json!("has space"), json!(null), json!(7)] {
+        body["repository"]["branch"] = bad.clone();
+        let (status, answer) = update(&pool, &admin, &id, body.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(
+            answer["issues"],
+            json!([{ "path": "repository.branch", "message": "This is not a valid branch name." }])
+        );
+    }
+}

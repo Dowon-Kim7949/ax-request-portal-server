@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: security
 project: ax-request-portal-server
-last_updated: 2026-11-26
+last_updated: 2026-11-27
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -32,7 +32,7 @@ related:
 visibility: public
 contains_sensitive_info: false
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-26
+reviewed_at: 2026-11-27
 ---
 
 # Security
@@ -51,7 +51,7 @@ reviewed_at: 2026-11-26
 
 ## Secrets
 
-- Provider keys, the runner token and the GitHub token come **only** from the environment (`deploy/.env`, git-ignored and Docker-ignored). The API never accepts or returns a key; it shows only "connected" and the last four characters. `Secret` values print as `Secret(…)` in logs.
+- Provider keys, the runner token and the GitHub tokens come **only** from the environment (`deploy/.env`, git-ignored and Docker-ignored). The API never accepts or returns a key; it shows only "connected" and the last four characters. `Secret` values print as `Secret(…)` in logs. There are two GitHub tokens: the runner's (`AX_GITHUB_TOKEN`, pushes and opens pull requests) and the server's (`AX_GITHUB_READ_TOKEN`, Contents read, to list a repository's branches). The web server never holds the token that can push, and it reads only GitHub's API host (`AX_GITHUB_API`), never the URL a person typed: the URL gives only `owner/name`.
 - The attachment link key is generated on first start and kept in `server_secrets`; nothing to configure.
 - The repository is public: no internal hosts, organisation or customer names, real data, keys or passwords. CI runs gitleaks over the whole history.
 

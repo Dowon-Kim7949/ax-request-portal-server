@@ -6,7 +6,7 @@ tags:
 status: verified
 doc_type: domain
 project: ax-request-portal-server
-last_updated: 2026-11-23
+last_updated: 2026-11-27
 author: cli-generated
 last_edited_by: claude-code
 wiki_block_version: v1
@@ -46,7 +46,7 @@ related:
 visibility: public
 contains_sensitive_info: false
 reviewed_by: Kim Dowon
-reviewed_at: 2026-11-23
+reviewed_at: 2026-11-27
 ---
 
 # Platform
@@ -58,7 +58,7 @@ What every operation shares: routing from the contract, the handler pipeline (se
 ## Routing from the contract
 
 - `ax-contract` embeds `contract/openapi.json`, `contract/lifecycle.json` and `contract/SOURCE` with `include_str!` and lists every `Operation { id, method, path }` (`operations`).
-- `routes::contract_routes` routes **every** contract operation: the ones in `implemented::IMPLEMENTED` to their handler (the `match` in `routes::implemented`), the rest to `501` naming the operation. If the two lists disagree, building the router **panics** — and every test builds it, so the mismatch never ships. `listed_in_contract_order` keeps `IMPLEMENTED` in contract order. All 46 operations are implemented.
+- `routes::contract_routes` routes **every** contract operation: the ones in `implemented::IMPLEMENTED` to their handler (the `match` in `routes::implemented`), the rest to `501` naming the operation. If the two lists disagree, building the router **panics** — and every test builds it, so the mismatch never ships. `listed_in_contract_order` keeps `IMPLEMENTED` in contract order. All 47 operations are implemented.
 - Outside the contract, `routes::router` adds `GET /files/{id}` ([Drafts and Attachments](06_drafts_attachments.md)) and `POST /runner/…` ([Runner](11_runner.md)), a JSON `404` fallback, and request tracing. The API is nested under `AX_BASE_PATH` (default `/`); `/healthz` (version and pinned contract commit) and `/readyz` (`select 1`; `503` when the database is unreachable, `200 not_configured` without one) stay at the root.
 
 ## Handler pipeline
@@ -79,7 +79,7 @@ Exceptions, each matching the mock: lifecycle operations load the request before
 
 ## State, database, CLI
 
-- `AppState` holds an optional pool (no `DATABASE_URL` → the server starts and data operations answer `500`), the policies from configuration, the business time zone, the AI configuration, the file signer and, with `AX_AI_PROVIDER=anthropic`, the Claude client. Pool: 10 connections, 3 s acquire timeout, lazy connect.
+- `AppState` holds an optional pool (no `DATABASE_URL` → the server starts and data operations answer `500`), the policies from configuration, the business time zone, the AI configuration, the file signer and, with `AX_AI_PROVIDER=anthropic`, the Claude client; also the read-only GitHub settings (`GitHubRead`) and the HTTP client for the project form's branch list. Pool: 10 connections, 3 s acquire timeout, lazy connect.
 - Migrations are embedded (`MIGRATOR`, `sqlx::migrate!`) and applied on start; sqlx's advisory lock makes concurrent starts safe. `build.rs` rebuilds when `migrations/` changes. An applied migration is never edited ([Data Model](../DATA_MODEL.md)).
 - `ax-api` (`run`): no subcommand or `serve` migrates and serves (graceful shutdown on Ctrl-C/SIGTERM); `migrate`; `user create | set-password` (the only way to make an operator; passwords from a prompt or stdin, never an argument); `runner`.
 
